@@ -28,7 +28,7 @@ const LANGUAGES = {
 async function processJob(job) {
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   // ✅ FIXED: updated from deprecated gemini-1.5-flash to gemini-2.0-flash
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" }); //const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const targetLang = LANGUAGES[job.targetLang] || "English";
   const sourceLang = job.sourceLang === "auto" ? "the source language (auto-detect)" : (LANGUAGES[job.sourceLang] || "Arabic");
@@ -47,22 +47,23 @@ async function processJob(job) {
   }
 
   parts.push({
-    text: `You are a professional translator. Translate the text in these scanned document page images from ${sourceLang} into ${targetLang}.
+    text: `You are a professional literary translator with native fluency in ${targetLang}. Translate ALL text visible in these scanned document page images from ${sourceLang} into ${targetLang}.
 
-Instructions:
-- Read all visible text carefully from each scanned page image
-- Provide a complete, accurate translation into ${targetLang}
+Critical rules:
+- Translate EVERY single word — do not leave any word in any other language
+- The output must contain ONLY ${targetLang} — no foreign words, no original-language terms
 - If a page is blank or has no meaningful text, write: [Blank page]
-- For title pages or publication info, translate those too
-- Preserve paragraph structure and formatting
-- For technical/specialized terms, keep the original term in parentheses on first use
-- Do NOT add commentary, footnotes, or explanations
+- Translate title pages, chapter headings, and all body text
+- Preserve paragraph breaks and natural prose flow
+- Proper nouns (personal names, place names) may be transliterated phonetically into ${targetLang} script
+- Do NOT add translator notes, footnotes, or any commentary
+- Do NOT wrap output in markdown or quotes
 
 Format your response EXACTLY as follows for each page (no extra text outside these blocks):
 
 ${job.pageNums.map(n => `===PAGE ${n}===\n[translation here]\n===END===`).join('\n\n')}
 
-Translate every page shown above.`
+Translate every page shown above. Output must be in ${targetLang} only.`
   });
 
   const result = await model.generateContent(parts);
