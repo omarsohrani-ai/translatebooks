@@ -39,73 +39,38 @@ const LANGUAGES = {
 
 // ── Shared translation prompt ──────────────────────────────────────────────
 function buildPrompt(targetLang, sourceLang, pageNums) {
-  return `You are an OCR translation engine. Your task is purely mechanical: read the pixels in each image and output their meaning in ${targetLang}. Nothing else.
+  return `You are a professional literary translator. Translate all text from these scanned document pages from ${sourceLang} into ${targetLang}.
 
-════════════════════════════════════════════
-RULE 1 — VISUAL ANCHORING (highest priority)
-════════════════════════════════════════════
-Before translating, silently count the visible lines of text in the image.
-Multiply that count by 10 — that is your internal word budget.
-This is a private calculation: do NOT write the word count, line count,
-or any meta-commentary in your output. Your output contains ONLY translated text.
-Example internal budget: 20 visible lines → ~200 words max output.
-
-This rule exists because you may recognise the document's subject matter. That recognition is a trap:
-- You must NOT continue, extend, or complete any text from your training knowledge
-- You must NOT add content that "fits" the genre, topic, style, or argument of the document
-- You must NOT fill in what logically "comes next"
-
-SPECIFICALLY FORBIDDEN for ALL document types — these are stock phrases your
-training data contains that are NOT printed on any real page you will ever be given:
-  ✗ Book introductions, prefaces, forewords, or dedications
-  ✗ Translator's notes ("I have been asked to translate...", "I have endeavoured...")
-  ✗ Author's acknowledgements or opening prayers of praise
-  ✗ Chapter summaries or editorial commentary
-  ✗ Legal boilerplate, terms-and-conditions expansions
-  ✗ Medical disclaimers or standard clinical text
-  ✗ Any passage that begins with "In the name of God..." unless those exact words appear in the image
-
-This applies to ALL document types without exception:
-  legal text, religious text, poetry, fiction, technical manuals,
-  medical records, contracts, letters, news articles, academic papers —
-  every genre carries the same risk of hallucination.
-
-The moment you run out of visible text on the page → STOP. Do not add a single word more.
-If a word is illegible → write [illegible].
-If a line is partially cut off → translate only the visible portion and STOP.
-
-LOOP SELF-CHECK: While writing, if you notice yourself repeating the same sentence
-structure more than twice (e.g. "If X then Y", "If X then Y", "If X then Y"…),
-STOP immediately. You have entered a hallucination loop. Delete the repetitions and end
-the block. Real pages do not contain infinite variations of the same sentence.
-
-════════════════════════════════════════════
-RULE 2 — TRANSLATION QUALITY
-════════════════════════════════════════════
-- Translate EVERY visible word fully into ${targetLang} — no source-language words in output
+STRICT RULES — follow every one without exception:
+- Translate EVERY single word completely into ${targetLang}
+- Do NOT leave any word in the source language or any other language
 - Do NOT use parentheses to preserve original terms — translate everything
-- If the source contains a word from a third language, translate that too into ${targetLang}
-- Preserve paragraph breaks, section headings, and typographic markers exactly as they appear
-- If a page is blank or contains no meaningful text, write exactly: [Blank page]
-- Do NOT add translator notes, footnotes, commentary, summaries, or explanations
+- If the source text contains words from a third language, translate those too into ${targetLang}
+- Preserve the original paragraph structure and line breaks
+- If a page is blank or has no meaningful text, write exactly: [Blank page]
+- Do NOT add translator notes, footnotes, commentary, or explanations
+- Do NOT wrap your response in markdown code blocks or any other formatting
+- Do NOT write anything outside the page blocks below
 
-════════════════════════════════════════════
-RULE 3 — OUTPUT FORMAT
-════════════════════════════════════════════
-- Do NOT wrap output in markdown, code blocks, or any formatting tags
-- Write ONLY the ===PAGE N=== blocks shown below — nothing before, nothing after
+CRITICAL FORMATTING RULE — this is the most important rule:
+You are translating ${pageNums.length} separate pages: ${pageNums.join(', ')}.
+Even if the text flows continuously from one page to the next without a break,
+you MUST output a separate ===PAGE N=== block for EVERY single page number listed.
+Never merge two pages into one block. Never skip a page number.
+Each page image = one ===PAGE N=== block. No exceptions.
 
-You are translating ${pageNums.length} page(s): ${pageNums.join(', ')}.
+STOP RULE — most important: Translate ONLY the exact text visible in each image.
+Once you have translated everything visible on the page, STOP immediately.
+Do NOT continue, repeat, or add anything after the visible text ends.
+Do NOT repeat any sentence, phrase, or paragraph more than once.
+
+Your response must contain EXACTLY ${pageNums.length} blocks in this format:
 
 ${pageNums.map(n =>
-  `===PAGE ${n}===\n[translate only the exact text visible in page ${n} image — stop when the image text ends]\n===END===`
+  `===PAGE ${n}===\n[your complete ${targetLang} translation of page ${n} here]\n===END===`
 ).join('\n\n')}
 
-Final self-check before submitting:
-  • Does your output contain exactly ${pageNums.length} block(s)?
-  • Is the output length proportional to the text visible in the image?
-  • Did you add ANYTHING not physically printed on the page? If yes → delete it.
-  • Does it contain a preface, introduction, translator's note, or word count? If yes → delete it.`;
+Check your response before finishing: does it contain all ${pageNums.length} blocks for pages ${pageNums.join(', ')}?`;
 }
 
 // ── Robust split-based page extractor ─────────────────────────────────────
@@ -113,12 +78,7 @@ function extractPages(raw, pageNums) {
   let text = raw
     .replace(/^```[\w]*\n?/m, '').replace(/\n?```\s*$/m, '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
-    // Strip meta-commentary the AI sometimes leaks into output
-    .replace(/\[word count[^\]]*\]/gi, '')
-    .replace(/\[line count[^\]]*\]/gi, '')
-    .replace(/\[translation (note|end|complete)[^\]]*\]/gi, '')
-    .replace(/\(word count[^)]*\)/gi, '');
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
 
   text = text
     .replace(/===\s*PAGE\s+(\d+)\s*===/gi, (_, n) => `\n===PAGE ${n}===\n`)
@@ -133,23 +93,6 @@ function extractPages(raw, pageNums) {
     if (content) blocks[pn] = deduplicateContent(content);
   }
 
-  // ── Fallback: no PAGE markers found ───────────────────────────────────────
-  // Happens when: (a) AI ignores format instructions, (b) Gemini silent
-  // RECITATION returns a refusal sentence instead of throwing an exception,
-  // (c) response is otherwise well-formed but lacks the delimiters.
-  // Recovery: strip any stray markers and treat the full response as content.
-  if (Object.keys(blocks).length === 0) {
-    const fallback = text
-      .replace(/===END===/gi, '')
-      .replace(/===PAGE\s*\d+===/gi, '')
-      .trim();
-    if (fallback && fallback.length > 10) {
-      const firstPage = pageNums[0];
-      blocks[firstPage] = deduplicateContent(fallback);
-      console.log(`[translate] No PAGE markers — fallback: full response assigned to page ${firstPage}`);
-    }
-  }
-
   const parsed = {};
   for (const pn of pageNums) {
     parsed[pn] = blocks[pn] || `[Could not extract page ${pn}]`;
@@ -157,37 +100,21 @@ function extractPages(raw, pageNums) {
   return parsed;
 }
 
-// ── Within-page deduplication ─────────────────────────────────────────────
-// Catches two classes of AI hallucination:
-//   1. Consecutive repeated lines (same line printed back-to-back)
-//   2. Non-consecutive repeated lines — AI loops back and re-prints content
-//      that already appeared earlier on the same page
-//      (this is the most common cause of duplicate aphorisms / paragraphs)
+// Remove hallucinated repetitions: if a sentence appears 3+ times consecutively,
+// keep only the first 2 occurrences and truncate the rest.
 function deduplicateContent(text) {
   const lines = text.split('\n');
   const out   = [];
   let lastLine = '', repeatCount = 0;
 
-  // Tracks substantial lines (30+ chars) already seen anywhere on this page.
-  // Exact-match only — safe for texts with structurally similar but distinct sentences.
-  const seenSubstantial = new Set();
-
   for (const line of lines) {
     const trimmed = line.trim();
-
-    // Preserve blank lines (paragraph breaks) as-is
     if (!trimmed) { out.push(line); lastLine = ''; repeatCount = 0; continue; }
 
-    // For substantial lines: drop if already seen anywhere earlier on this page
-    if (trimmed.length >= 30) {
-      if (seenSubstantial.has(trimmed)) continue; // hallucinated repeat — drop
-      seenSubstantial.add(trimmed);
-    }
-
-    // For short lines: still block consecutive repeats (headers, labels, etc.)
     if (trimmed === lastLine) {
       repeatCount++;
-      if (repeatCount < 2) out.push(line);
+      if (repeatCount < 2) out.push(line); // allow one repeat at most
+      // silently drop further repetitions
     } else {
       out.push(line);
       lastLine    = trimmed;
@@ -195,113 +122,11 @@ function deduplicateContent(text) {
     }
   }
 
-  const joined = out.join('\n');
-  return detectAndTruncateLoop(joined);
-}
-
-// ── Semantic loop detector ─────────────────────────────────────────────────
-// Catches "template repetition" hallucinations: the AI keeps the same sentence
-// structure but swaps one word each iteration (e.g. "If you are X then you will
-// see Y" cycling through synonyms). These don't match as exact duplicates but
-// have very high word-set overlap between consecutive windows of text.
-function detectAndTruncateLoop(text) {
-  const words = text.split(/\s+/).filter(Boolean);
-  if (words.length < 80) return text; // too short to contain a meaningful loop
-
-  const WINDOW = 30; // sliding window size in words
-  const STEP   = Math.max(1, Math.floor(WINDOW / 2));
-
-  for (let i = WINDOW * 2; i <= words.length - WINDOW; i += STEP) {
-    // Build a set of meaningful words (3+ chars) from the previous window
-    const prevSet = new Set(
-      words.slice(i - WINDOW, i)
-           .map(w => w.toLowerCase().replace(/[^a-z]/g, ''))
-           .filter(w => w.length >= 3)
-    );
-    if (prevSet.size === 0) continue;
-
-    // Count how many current-window words are already in the previous window
-    const currWords = words.slice(i, i + WINDOW)
-                           .map(w => w.toLowerCase().replace(/[^a-z]/g, ''))
-                           .filter(w => w.length >= 3);
-    if (currWords.length === 0) continue;
-
-    const overlap = currWords.filter(w => prevSet.has(w)).length / currWords.length;
-
-    if (overlap >= 0.62) {
-      // Step back to find the exact sentence boundary before the loop starts
-      const cutPoint = Math.max(0, i - STEP);
-      let truncated = words.slice(0, cutPoint).join(' ');
-
-      // Trim to the last complete sentence so output doesn't end mid-phrase
-      const lastStop = Math.max(
-        truncated.lastIndexOf('. '),
-        truncated.lastIndexOf('! '),
-        truncated.lastIndexOf('? '),
-        truncated.lastIndexOf('.\n'),
-      );
-      if (lastStop > truncated.length * 0.4) {
-        truncated = truncated.slice(0, lastStop + 1).trim();
-      }
-
-      console.log(
-        `[translate] Semantic loop detected at word ${i} ` +
-        `(${Math.round(overlap * 100)}% overlap) — truncating to ${cutPoint} words`
-      );
-      return truncated;
-    }
-  }
-  return text;
-}
-
-// ── Cross-page / cross-batch deduplication ────────────────────────────────
-// When the AI is given pages N and N+1 in separate batches, it sometimes
-// re-translates the last 1–6 lines of page N at the very start of page N+1.
-// This pass compares the tail of each page with the head of the next and
-// strips any matching prefix from the later page.
-function deduplicateAcrossPages(parsed, pageNums) {
-  const sorted = [...pageNums].sort((a, b) => a - b);
-
-  for (let i = 0; i < sorted.length - 1; i++) {
-    const currPn = sorted[i];
-    const nextPn = sorted[i + 1];
-    if (!parsed[currPn] || !parsed[nextPn]) continue;
-    // Skip error/placeholder pages
-    if (parsed[currPn].startsWith('[') || parsed[nextPn].startsWith('[')) continue;
-
-    const currLines    = parsed[currPn].split('\n').map(l => l.trim()).filter(Boolean);
-    const nextLines    = parsed[nextPn].split('\n');          // keep originals for output
-    const nextTrimmed  = nextLines.map(l => l.trim()).filter(Boolean);
-
-    // Try overlaps of 1–6 lines (only match lines that are 20+ chars — ignore short headings)
-    const maxCheck = Math.min(6, currLines.length, nextTrimmed.length);
-    let overlapCount = 0;
-
-    for (let t = maxCheck; t >= 1; t--) {
-      const tail = currLines.slice(-t);
-      const head = nextTrimmed.slice(0, t);
-      const allMatch = tail.every((line, idx) => line === head[idx] && line.length >= 20);
-      if (allMatch) { overlapCount = t; break; }
-    }
-
-    if (overlapCount > 0) {
-      // Remove the overlapping lines from the start of the next page (preserve spacing)
-      const tail = currLines.slice(-overlapCount);
-      let removed = 0;
-      const newNext = [];
-      for (const line of nextLines) {
-        if (removed < overlapCount && line.trim() === tail[removed]) {
-          removed++;
-          continue; // drop this duplicate line
-        }
-        newNext.push(line);
-      }
-      parsed[nextPn] = newNext.join('\n').replace(/^\n+/, '').trim();
-      console.log(`[translate] Cross-page dedup: removed ${overlapCount} line(s) from start of page ${nextPn}`);
-    }
-  }
-
-  return parsed;
+  // Also catch paragraph-level repetition (same sentence repeated in a paragraph)
+  const result = out.join('\n');
+  // Find any sentence repeated 3+ times and keep only 2 occurrences
+  const sentenceRepeat = /(.{30,})\n(\1\n){2,}/g;
+  return result.replace(sentenceRepeat, '$1\n$1\n');
 }
 
 // ── Provider: Gemini ───────────────────────────────────────────────────────
@@ -313,9 +138,7 @@ async function processWithGemini(job) {
       // Tight token cap per page — prevents hallucination loops on dense/repetitive text.
       // Dense Arabic manuscript page ≈ 300–400 translated words ≈ 400–550 tokens.
       // 800 per page is generous enough for real content, tight enough to cut loops.
-      // 500 tokens/page: enough for dense real content (~350 translated words),
-      // tight enough to hard-cut hallucination loops before they spiral.
-      maxOutputTokens: job.pageNums.length * 500,
+      maxOutputTokens: job.pageNums.length * 800,
       temperature: 0.1
     }
   });
@@ -333,20 +156,11 @@ async function processWithGemini(job) {
   parts.push({ text: buildPrompt(targetLang, sourceLang, job.pageNums) });
 
   const result = await model.generateContent(parts);
-  const raw = result.response.text();
-
-  // Gemini sometimes returns an empty string instead of throwing when its
-  // safety filter (RECITATION) silently blocks classical/religious content.
-  // Treat empty as RECITATION so the caller can fall back to Groq.
-  if (!raw || raw.trim().length < 5) {
-    throw new Error('RECITATION: Gemini returned empty response (silent safety filter)');
-  }
-  return raw;
+  return result.response.text();
 }
 
-// ── Provider: Groq (Llama 4 Maverick) ────────────────────────────────────
-// Llama 4 Maverick: 17B params, 128 experts — significantly better instruction
-// following than Scout (16 experts). Natively multimodal, supports Arabic.
+// ── Provider: Groq (Llama 4 Scout) ────────────────────────────────────────
+// Llama 4 Scout is natively multimodal and lists Arabic as a supported language.
 // Free tier: 1,000 RPD, 30,000 TPM — no credit card required.
 // Get a key at: console.groq.com
 async function processWithGroq(job) {
@@ -373,9 +187,9 @@ async function processWithGroq(job) {
       "Authorization": `Bearer ${GROQ_API_KEY}`
     },
     body: JSON.stringify({
-      model:      "meta-llama/llama-4-maverick-17b-128e-instruct",
+      model:      "meta-llama/llama-4-scout-17b-16e-instruct",
       messages:   [{ role: "user", content }],
-      max_tokens: job.pageNums.length * 500,
+      max_tokens: job.pageNums.length * 800,
       temperature: 0.1
     })
   });
@@ -422,8 +236,7 @@ async function processJob(job) {
     } catch (_) { /* keep original failure */ }
   }
 
-  // Final pass: remove any cross-batch overlap between consecutive pages
-  return deduplicateAcrossPages(parsed, job.pageNums);
+  return parsed;
 }
 
 // ── Helper: classify quota errors ─────────────────────────────────────────
