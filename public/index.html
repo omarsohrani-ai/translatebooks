@@ -521,6 +521,85 @@ select:focus, input:focus {
   margin: 0 10px;
   font-size: 0.85em;
 }
+/* ── THEME SWATCHES ──────────────────────────────────────── */
+.theme-group-label {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 0.78em;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 8px;
+  font-weight: 600;
+}
+.theme-grid {
+  display: grid;
+  grid-template-columns: repeat(5, 1fr);
+  gap: 8px;
+  margin-bottom: 14px;
+}
+@media(max-width:500px) { .theme-grid { grid-template-columns: repeat(5,1fr); } }
+.theme-swatch {
+  cursor: pointer;
+  border-radius: 8px;
+  border: 2px solid transparent;
+  padding: 10px 4px 8px;
+  text-align: center;
+  transition: all 0.2s;
+  background: var(--card2);
+}
+.theme-swatch:hover { border-color: var(--border2); transform: translateY(-1px); }
+.theme-swatch.active { border-color: var(--gold); }
+.swatch-dot {
+  width: 34px; height: 34px;
+  border-radius: 50%;
+  margin: 0 auto 7px;
+  border: 2px solid rgba(128,100,60,0.2);
+  display: flex; align-items: center; justify-content: center;
+  font-size: 0.55em; font-weight: 700;
+  letter-spacing: 0.05em;
+}
+.swatch-name {
+  font-size: 0.67em; color: var(--muted);
+  font-style: italic; line-height: 1.3;
+  font-family: 'Lora', serif;
+}
+.theme-swatch.active .swatch-name { color: var(--gold); }
+
+/* ── THEME PREVIEW STRIP ─────────────────────────────────── */
+.theme-preview {
+  border-radius: 8px;
+  padding: 14px 18px;
+  margin: 12px 0;
+  border: 1px solid var(--border);
+  transition: all 0.3s;
+  font-family: 'Lora', Georgia, serif;
+}
+.theme-preview-title {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 0.85em;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  margin-bottom: 6px;
+  font-weight: 600;
+}
+.theme-preview-body { font-size: 0.88em; line-height: 1.8; }
+
+/* ── TYPO OPTIONS ────────────────────────────────────────── */
+.typo-row { display: flex; gap: 6px; flex-wrap: wrap; }
+.typo-btn {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 6px 14px;
+  color: var(--muted);
+  cursor: pointer;
+  font-family: 'Lora', serif;
+  font-size: 0.8em;
+  font-style: italic;
+  transition: all 0.15s;
+}
+.typo-btn:hover { border-color: var(--border2); color: var(--text); }
+.typo-btn.active { border-color: var(--gold-dim); color: var(--gold); background: var(--card3); }
 </style>
 </head>
 <body>
@@ -712,6 +791,61 @@ select:focus, input:focus {
       </div>
     </div>
   </div>
+
+  <!-- PDF Export Style -->
+  <div class="section-rule"><span>✦ PDF Export Style</span></div>
+
+  <div class="card">
+    <div class="card-title"><span class="ti">🎨</span> Reading Theme &amp; Typography</div>
+
+    <div class="theme-group-label">Gentle Light</div>
+    <div class="theme-grid" id="lightSwatches"></div>
+
+    <div class="theme-group-label">Easy Dark</div>
+    <div class="theme-grid" id="darkSwatches"></div>
+
+    <div class="theme-preview" id="themePreview">
+      <div class="theme-preview-title" id="previewTitle">Parchment</div>
+      <div class="theme-preview-body" id="previewBody">
+        The translated text will appear like this in your PDF — this sample
+        shows the contrast, warmth, and overall reading comfort of the
+        selected theme.
+      </div>
+    </div>
+
+    <hr class="divider" style="margin:16px 0">
+
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
+      <div>
+        <div class="theme-group-label" style="margin-bottom:8px">Font Size</div>
+        <div class="typo-row" id="fontSizeBtns">
+          <button class="typo-btn" onclick="setFontSize(9)">Small</button>
+          <button class="typo-btn active" onclick="setFontSize(11)">Normal</button>
+          <button class="typo-btn" onclick="setFontSize(13)">Large</button>
+          <button class="typo-btn" onclick="setFontSize(15)">X-Large</button>
+        </div>
+      </div>
+      <div>
+        <div class="theme-group-label" style="margin-bottom:8px">Line Spacing</div>
+        <div class="typo-row" id="spacingBtns">
+          <button class="typo-btn" onclick="setSpacing(1.5)">Compact</button>
+          <button class="typo-btn active" onclick="setSpacing(1.8)">Normal</button>
+          <button class="typo-btn" onclick="setSpacing(2.2)">Airy</button>
+        </div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px">
+      <div class="theme-group-label" style="margin-bottom:8px">Page Margins</div>
+      <div class="typo-row" id="marginBtns">
+        <button class="typo-btn" onclick="setMargin(15)">Narrow</button>
+        <button class="typo-btn active" onclick="setMargin(22)">Normal</button>
+        <button class="typo-btn" onclick="setMargin(30)">Wide</button>
+        <button class="typo-btn" onclick="setMargin(38)">Book-style</button>
+      </div>
+    </div>
+  </div>
+
   <div class="section-rule"><span>✦ Controls</span></div>
 
   <div class="card">
@@ -800,6 +934,142 @@ const serverUrl = window.location.origin;
 
 const RTL_LANGS = new Set(['ar', 'he', 'fa', 'ur']);
 
+// ── PDF Theme System ───────────────────────────────────────────
+const PDF_THEMES = {
+  // ── Light themes ──
+  parchment: {
+    name:'Parchment', group:'light', emoji:'📜',
+    bg:'#fefbf4', text:'#1c1408', headerBg:'#090704',
+    headerText:'#786040', accent:'#c49030',
+    rtlLineH: 2.6, desc:'Warm & classic'
+  },
+  white: {
+    name:'Paper White', group:'light', emoji:'📄',
+    bg:'#ffffff', text:'#1a1a1a', headerBg:'#1a1a1a',
+    headerText:'#888888', accent:'#444444',
+    rtlLineH: 2.4, desc:'Clean & crisp'
+  },
+  cream: {
+    name:'Warm Cream', group:'light', emoji:'🍦',
+    bg:'#fdf6e3', text:'#2d2006', headerBg:'#2d2006',
+    headerText:'#8a7040', accent:'#8a6d3b',
+    rtlLineH: 2.5, desc:'Soft on eyes'
+  },
+  sepia: {
+    name:'Sepia', group:'light', emoji:'📷',
+    bg:'#f4e4c1', text:'#2d1b00', headerBg:'#2d1b00',
+    headerText:'#8b6240', accent:'#8b4513',
+    rtlLineH: 2.5, desc:'Vintage feel'
+  },
+  rose: {
+    name:'Soft Rose', group:'light', emoji:'🌸',
+    bg:'#fdf0f0', text:'#2d0f0f', headerBg:'#2d0f0f',
+    headerText:'#8b5050', accent:'#8b3a3a',
+    rtlLineH: 2.4, desc:'Gentle tint'
+  },
+  // ── Dark themes ──
+  night: {
+    name:'Night', group:'dark', emoji:'🌙',
+    bg:'#1a1a1a', text:'#e0e0e0', headerBg:'#0d0d0d',
+    headerText:'#888888', accent:'#c49030',
+    rtlLineH: 2.6, desc:'Pure dark'
+  },
+  warmNight: {
+    name:'Warm Night', group:'dark', emoji:'🕯️',
+    bg:'#1c1710', text:'#e4cfa0', headerBg:'#090704',
+    headerText:'#786040', accent:'#c49030',
+    rtlLineH: 2.6, desc:'Amber glow'
+  },
+  solarized: {
+    name:'Solarized', group:'dark', emoji:'🌊',
+    bg:'#002b36', text:'#93a1a1', headerBg:'#001f27',
+    headerText:'#586e75', accent:'#2aa198',
+    rtlLineH: 2.6, desc:'Easy contrast'
+  },
+  forest: {
+    name:'Forest', group:'dark', emoji:'🌲',
+    bg:'#0d1f0d', text:'#c8e6c9', headerBg:'#061206',
+    headerText:'#4a8a4a', accent:'#66bb6a',
+    rtlLineH: 2.6, desc:'Nature calm'
+  },
+  slate: {
+    name:'Slate', group:'dark', emoji:'🔷',
+    bg:'#1a1f2e', text:'#c5cfe8', headerBg:'#0d1118',
+    headerText:'#5a7090', accent:'#7e9cbf',
+    rtlLineH: 2.6, desc:'Cool blue'
+  }
+};
+
+let pdfTheme    = 'parchment';
+let pdfFontSize = 11;    // pt
+let pdfSpacing  = 1.8;   // line height multiplier
+let pdfMargin   = 22;    // mm
+
+function hexToRgb(hex) {
+  const h = hex.replace('#','');
+  return [
+    parseInt(h.slice(0,2),16),
+    parseInt(h.slice(2,4),16),
+    parseInt(h.slice(4,6),16)
+  ];
+}
+
+function buildSwatches() {
+  ['light','dark'].forEach(group => {
+    const el = document.getElementById(group === 'light' ? 'lightSwatches' : 'darkSwatches');
+    if (!el) return;
+    el.innerHTML = '';
+    Object.entries(PDF_THEMES)
+      .filter(([,t]) => t.group === group)
+      .forEach(([key, t]) => {
+        const div = document.createElement('div');
+        div.className = 'theme-swatch' + (key === pdfTheme ? ' active' : '');
+        div.title = t.desc;
+        div.onclick = () => selectTheme(key);
+        const textHex = t.text;
+        div.innerHTML = `
+          <div class="swatch-dot" style="background:${t.bg};color:${textHex}">Aa</div>
+          <div class="swatch-name">${t.name}</div>`;
+        el.appendChild(div);
+      });
+  });
+  applyThemePreview();
+}
+
+function selectTheme(key) {
+  pdfTheme = key;
+  document.querySelectorAll('.theme-swatch').forEach(el => el.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+  applyThemePreview();
+}
+
+function applyThemePreview() {
+  const t = PDF_THEMES[pdfTheme];
+  const p = document.getElementById('themePreview');
+  if (!p) return;
+  p.style.background   = t.bg;
+  p.style.borderColor  = t.accent;
+  document.getElementById('previewTitle').style.color  = t.accent;
+  document.getElementById('previewBody').style.color   = t.text;
+  document.getElementById('previewTitle').textContent  = `${t.emoji}  ${t.name} — ${t.desc}`;
+}
+
+function setFontSize(n) {
+  pdfFontSize = n;
+  document.querySelectorAll('#fontSizeBtns .typo-btn').forEach(b => b.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+function setSpacing(n) {
+  pdfSpacing = n;
+  document.querySelectorAll('#spacingBtns .typo-btn').forEach(b => b.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+function setMargin(n) {
+  pdfMargin = n;
+  document.querySelectorAll('#marginBtns .typo-btn').forEach(b => b.classList.remove('active'));
+  event.currentTarget.classList.add('active');
+}
+
 // ── Free Tier Guide ────────────────────────────────────────────
 function toggleGuide() {
   const body = document.getElementById('guideBody');
@@ -867,6 +1137,7 @@ function updateCalc() {
 
 // ── Server init ────────────────────────────────────────────────
 window.addEventListener('load', async () => {
+  buildSwatches();
   try {
     const r = await fetch(`${serverUrl}/api/translate?action=queue`);
     if (r.ok) {
@@ -1137,12 +1408,23 @@ function log(msg, type = 'dim') {
   box.scrollTop = box.scrollHeight;
 }
 
-// ── PDF Generation (RTL-aware) ─────────────────────────────────
+// ── PDF Generation (theme-aware, RTL-aware) ────────────────────
 async function downloadPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-  const W = 210, H = 297, mL = 22, mR = 22, mT = 28, mB = 22;
-  const cW = W - mL - mR;
+
+  // ── Active theme & typography ──────────────────────────────
+  const T    = PDF_THEMES[pdfTheme];
+  const mL   = pdfMargin, mR = pdfMargin, mB = 18, mT = pdfMargin + 6;
+  const W    = 210, H = 297;
+  const cW   = W - mL - mR;
+  const lH   = pdfFontSize * pdfSpacing * 0.352778; // pt → mm, then × spacing
+
+  const [bgR,  bgG,  bgB]  = hexToRgb(T.bg);
+  const [txR,  txG,  txB]  = hexToRgb(T.text);
+  const [hbR,  hbG,  hbB]  = hexToRgb(T.headerBg);
+  const [htR,  htG,  htB]  = hexToRgb(T.headerText);
+  const [acR,  acG,  acB]  = hexToRgb(T.accent);
 
   const tgtLangCode = document.getElementById('targetLang').value;
   const tgtName = document.getElementById('targetLang')
@@ -1151,84 +1433,69 @@ async function downloadPDF() {
     .options[document.getElementById('sourceLang').selectedIndex].text;
   const isRTL = RTL_LANGS.has(tgtLangCode);
 
-  log('Composing PDF…', 'info');
+  log(`Composing PDF — theme: ${T.name}, ${pdfFontSize}pt, ${pdfSpacing}× spacing…`, 'info');
 
-  // Strip emoji and non-ASCII so jsPDF (Latin fonts only) renders cleanly
-  function pdfSafe(str) {
-    return str.replace(/[^\x20-\x7E]/g, '').trim();
-  }
-  const safeSrc = pdfSafe(srcName) || srcName.split(' ').slice(1).join(' ') || 'Auto-detect';
+  function pdfSafe(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
+  const safeSrc = pdfSafe(srcName) || 'Auto-detect';
   const safeTgt = pdfSafe(tgtName) || tgtName.split(' ').slice(1).join(' ') || tgtName;
   const siteUrl = 'translatebooks.vercel.app';
 
-  // ── Watermark helper ────────────────────────────────────────
+  // Watermark — auto-tints to be subtle against any background
   function addWatermark() {
-    doc.setGState(new doc.GState({ opacity: 0.055 }));
+    doc.setGState(new doc.GState({ opacity: 0.06 }));
     doc.setFont('times', 'bolditalic');
     doc.setFontSize(52);
-    doc.setTextColor(160, 120, 40);
+    doc.setTextColor(acR, acG, acB);
     doc.text('DocuTranslate', W/2, H/2 + 14, { align: 'center', angle: 42 });
     doc.setGState(new doc.GState({ opacity: 1.0 }));
   }
 
-  // ── Footer helper ───────────────────────────────────────────
+  // Footer
   function addFooter() {
     doc.setFontSize(6.5);
     doc.setFont('times', 'italic');
-    doc.setTextColor(140, 108, 60);
-    doc.text(siteUrl, W/2, H - 7, { align: 'center' });
+    doc.setTextColor(htR, htG, htB);
+    doc.text(siteUrl, W/2, H - 6, { align: 'center' });
   }
 
   // ── Title page ──────────────────────────────────────────────
-  doc.setFillColor(9, 7, 4);
+  doc.setFillColor(hbR, hbG, hbB);
   doc.rect(0, 0, W, H, 'F');
-
-  // Double border
-  doc.setDrawColor(122, 90, 24);
+  doc.setDrawColor(acR, acG, acB);
   doc.setLineWidth(0.5);
   doc.rect(9, 9, W-18, H-18);
   doc.setLineWidth(0.2);
   doc.rect(12, 12, W-24, H-24);
 
-  // Title
-  doc.setTextColor(196, 144, 48);
+  doc.setTextColor(acR, acG, acB);
   doc.setFont('times', 'bolditalic');
   doc.setFontSize(30);
-  doc.text('DocuTranslate', W/2, 60, { align: 'center' });
+  doc.text('DocuTranslate', W/2, 58, { align: 'center' });
 
-  // Subtitle
   doc.setFont('times', 'italic');
   doc.setFontSize(11);
-  doc.setTextColor(160, 130, 80);
-  doc.text('AI-Powered Literary Translation', W/2, 72, { align: 'center' });
+  doc.setTextColor(htR, htG, htB);
+  doc.text('AI-Powered Literary Translation', W/2, 70, { align: 'center' });
 
-  // Rules
-  doc.setDrawColor(100, 76, 24);
+  doc.setDrawColor(acR, acG, acB);
   doc.setLineWidth(0.25);
-  doc.line(36, 81, W-36, 81);
+  doc.line(36, 80, W-36, 80);
+  doc.setFontSize(13);
+  doc.text('- o -', W/2, 91, { align: 'center' });
 
-  doc.setTextColor(100, 76, 24);
-  doc.setFontSize(14);
-  doc.setFont('times', 'normal');
-  doc.text('- o -', W/2, 92, { align: 'center' });
-
-  // Metadata (ASCII-safe names only — jsPDF cannot render non-Latin glyphs)
   doc.setFont('times', 'normal');
   doc.setFontSize(10);
-  doc.setTextColor(120, 96, 56);
   const meta = [
     `Source Language: ${safeSrc}`,
     `Translated into: ${safeTgt}`,
     `Pages translated: ${Object.keys(translations).length}`,
+    `Theme: ${T.name}  *  Font: ${pdfFontSize}pt  *  Spacing: ${pdfSpacing}x`,
   ];
-  meta.forEach((line, i) => doc.text(line, W/2, 106 + i * 11, { align: 'center' }));
+  meta.forEach((line, i) => doc.text(line, W/2, 105 + i * 11, { align: 'center' }));
 
-  doc.line(36, 142, W-36, 142);
-
+  doc.line(36, 152, W-36, 152);
   doc.setFontSize(8);
-  doc.setTextColor(80, 64, 40);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, W/2, 152, { align: 'center' });
-
+  doc.text(`Generated: ${new Date().toLocaleString()}`, W/2, 162, { align: 'center' });
   doc.setFont('times', 'italic');
   doc.setFontSize(7.5);
   doc.text(`Powered by Google Gemini AI  *  ${siteUrl}`, W/2, H-17, { align: 'center' });
@@ -1237,16 +1504,16 @@ async function downloadPDF() {
 
   const sorted = Object.keys(translations).map(Number).sort((a, b) => a - b);
 
-  // Helper: draw page header bar
+  // Header bar for each page
   function drawHeader(pageNum, cont = false) {
-    doc.setFillColor(9, 7, 4);
+    doc.setFillColor(hbR, hbG, hbB);
     doc.rect(0, 0, W, 14, 'F');
-    doc.setDrawColor(122, 90, 24);
+    doc.setDrawColor(acR, acG, acB);
     doc.setLineWidth(0.15);
     doc.line(0, 14, W, 14);
     doc.setFontSize(7.5);
     doc.setFont('times', 'italic');
-    doc.setTextColor(120, 96, 56);
+    doc.setTextColor(htR, htG, htB);
     doc.text('DocuTranslate', mL, 9);
     doc.text(`Page ${pageNum}${cont ? ' (cont.)' : ''}  *  ${safeTgt}`, W - mR, 9, { align: 'right' });
   }
@@ -1259,70 +1526,61 @@ async function downloadPDF() {
       const text = translations[pn] || '';
       const isBlank = !text || text.trim() === '[Blank page]' || text.trim() === '';
 
-      doc.setFillColor(254, 251, 244);
+      doc.setFillColor(bgR, bgG, bgB);
       doc.rect(0, 0, W, H, 'F');
       drawHeader(pn);
 
       if (isBlank) {
         doc.setFontSize(10);
-        doc.setTextColor(160, 140, 100);
+        doc.setTextColor(htR, htG, htB);
         doc.setFont('times', 'italic');
         doc.text(`— Page ${pn}: Blank —`, W/2, H/2, { align: 'center' });
-        addWatermark();
-        addFooter();
-        doc.addPage();
-        continue;
+        addWatermark(); addFooter();
+        doc.addPage(); continue;
       }
-      const SCALE = 2;
-      const PX_MM = 96 / 25.4;
+
+      const SCALE = 2, PX_MM = 96/25.4;
+      const imgH = H - 16 - mB - 10;
       const divW = Math.round(cW * PX_MM * SCALE);
-      const imgH = H - 16 - mB - 10; // leave 10mm for footer
       const divH = Math.round(imgH * PX_MM * SCALE);
+
+      // RTL font size scales with user selection (base 12pt @ normal)
+      const rtlPx = Math.round((pdfFontSize / 11) * 12 * SCALE);
 
       const div = document.createElement('div');
       div.style.cssText = [
-        'position:fixed', 'top:0', 'left:-99999px',
+        'position:fixed','top:0','left:-99999px',
         `width:${divW}px`, `height:${divH}px`,
         'overflow:hidden',
-        'background:#fefbf4',
-        'color:#1c1408',
+        `background:${T.bg}`,
+        `color:${T.text}`,
         "font-family:'Noto Nastaliq Urdu','Jameel Noori Nastaleeq','Amiri',serif",
-        `font-size:${Math.round(12 * SCALE)}px`,
-        'line-height:2.6',
-        'direction:rtl',
-        'text-align:justify',
-        `padding:${Math.round(10 * SCALE)}px ${Math.round(14 * SCALE)}px`,
-        'box-sizing:border-box',
-        'word-break:break-word',
-        'white-space:pre-wrap'
+        `font-size:${rtlPx}px`,
+        `line-height:${T.rtlLineH}`,
+        'direction:rtl','text-align:justify',
+        `padding:${Math.round(10*SCALE)}px ${Math.round(14*SCALE)}px`,
+        'box-sizing:border-box','word-break:break-word','white-space:pre-wrap'
       ].join(';');
       div.textContent = text;
       document.body.appendChild(div);
 
       try {
         const canvas = await html2canvas(div, {
-          scale: 1,
-          useCORS: true,
-          backgroundColor: '#fefbf4',
-          logging: false,
-          width: divW,
-          height: divH
+          scale:1, useCORS:true, backgroundColor:T.bg, logging:false,
+          width:divW, height:divH
         });
-        doc.addImage(canvas.toDataURL('image/jpeg', 0.93),
-          'JPEG', mL, 16, cW, imgH);
-        addWatermark();
-        addFooter();
+        doc.addImage(canvas.toDataURL('image/jpeg', 0.93), 'JPEG', mL, 16, cW, imgH);
+        addWatermark(); addFooter();
         log(`✓ RTL page ${pn} rendered`, 'ok');
       } catch(e) {
         doc.setFontSize(9);
-        doc.setTextColor(160, 60, 60);
+        doc.setTextColor(180, 60, 60);
         doc.text(`[Rendering error on page ${pn}]`, mL, mT + 5);
         addFooter();
         log(`⚠ Canvas error page ${pn}: ${e.message}`, 'warn');
       } finally {
         document.body.removeChild(div);
       }
-
       doc.addPage();
     }
 
@@ -1332,58 +1590,51 @@ async function downloadPDF() {
       const text = translations[pn] || '';
       const isBlank = !text || text.trim() === '[Blank page]' || text.trim() === '';
 
-      doc.setFillColor(254, 251, 244);
+      doc.setFillColor(bgR, bgG, bgB);
       doc.rect(0, 0, W, H, 'F');
       drawHeader(pn);
 
       if (isBlank) {
         doc.setFontSize(10);
-        doc.setTextColor(160, 140, 100);
+        doc.setTextColor(htR, htG, htB);
         doc.setFont('times', 'italic');
         doc.text(`— Page ${pn}: Blank —`, W/2, H/2, { align: 'center' });
-        addWatermark();
-        addFooter();
-        doc.addPage();
-        continue;
+        addWatermark(); addFooter();
+        doc.addPage(); continue;
       }
 
-      // Watermark goes BEHIND text — place before text rendering
       addWatermark();
-
-      doc.setTextColor(28, 20, 8);
-      doc.setFontSize(11);
+      doc.setTextColor(txR, txG, txB);
+      doc.setFontSize(pdfFontSize);
       doc.setFont('times', 'normal');
 
       const lines = doc.splitTextToSize(text, cW);
       let y = mT;
-      const lH = 6.4;
 
       for (const line of lines) {
         if (y + lH > H - mB - 10) {
           addFooter();
           doc.addPage();
-          doc.setFillColor(254, 251, 244);
+          doc.setFillColor(bgR, bgG, bgB);
           doc.rect(0, 0, W, H, 'F');
           drawHeader(pn, true);
           addWatermark();
-          doc.setTextColor(28, 20, 8);
-          doc.setFontSize(11);
+          doc.setTextColor(txR, txG, txB);
+          doc.setFontSize(pdfFontSize);
           doc.setFont('times', 'normal');
           y = mT;
         }
         doc.text(line, mL, y);
         y += lH;
       }
-
       addFooter();
       doc.addPage();
     }
   }
 
-  // Remove trailing blank page
   if (doc.getNumberOfPages() > 1) doc.deletePage(doc.getNumberOfPages());
 
-  const fname = `DocuTranslate_${safeTgt}_${new Date().toISOString().slice(0,10)}.pdf`;
+  const fname = `DocuTranslate_${safeTgt}_${T.name.replace(/\s+/g,'')}_${new Date().toISOString().slice(0,10)}.pdf`;
   doc.save(fname);
   log(`✅ Downloaded: ${fname}`, 'ok');
 }
