@@ -188,7 +188,27 @@ async function runQueue() {
 
       jobResults[job.id] = { status: "done", translations: parsed };
     } catch (err) {
-      jobResults[job.id] = { status: "error", error: err.message };
+      const msg = err.message || '';
+
+      // Daily quota exhausted — surface a clear error, skip remaining queue
+      if (msg.includes('GenerateRequestsPerDayPerProjectPerModel') ||
+          (msg.includes('429') && msg.includes('limit: 20'))) {
+        jobResults[job.id] = {
+          status: "error",
+          error: "QUOTA_EXHAUSTED: Daily free-tier limit reached (20 requests/day). Resets at midnight Pacific Time. Options: wait for reset, create a new Google Cloud project, or enable billing at aistudio.google.com."
+        };
+        // Drain the queue — no point processing further jobs today
+        while (queue.length > 0) {
+          const stale = queue.shift();
+          if (!jobResults[stale.id] || jobResults[stale.id].status === 'queued') {
+            jobResults[stale.id] = { status: "error", error: "QUOTA_EXHAUSTED: Daily limit reached." };
+          }
+        }
+        isProcessing = false;
+        return;
+      }
+
+      jobResults[job.id] = { status: "error", error: msg };
     }
 
     queue.shift();
