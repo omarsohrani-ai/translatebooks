@@ -129,6 +129,15 @@ async function runQueue() {
 
   while (queue.length > 0) {
     const job = queue[0];
+
+    // Skip jobs older than 10 minutes — browser session likely dead/abandoned.
+    // Without this, a stuck job from a previous session blocks every new user.
+    if (Date.now() - job.timestamp > 600000) {
+      jobResults[job.id] = { status: 'error', error: 'Job expired — session timed out after 10 minutes' };
+      queue.shift();
+      continue;
+    }
+
     jobResults[job.id] = { status: "processing", queuePos: 0 };
 
     try {
