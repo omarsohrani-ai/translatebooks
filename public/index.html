@@ -578,27 +578,140 @@ select:focus, input:focus {
       <div class="form-row">
         <div class="form-group">
           <label>Start Page</label>
-          <input type="number" id="startPage" value="1" min="1">
+          <input type="number" id="startPage" value="1" min="1" oninput="updateEstimate()">
         </div>
         <div class="form-group">
           <label>End Page</label>
-          <input type="number" id="endPage" placeholder="All" min="1">
+          <input type="number" id="endPage" placeholder="All" min="1" oninput="updateEstimate()">
         </div>
       </div>
 
       <div class="form-group">
         <label>Pages per Batch</label>
-        <select id="batchSize">
+        <select id="batchSize" onchange="updateEstimate()">
           <option value="2">2 pages &mdash; careful</option>
           <option value="3" selected>3 pages &mdash; recommended</option>
           <option value="4">4 pages &mdash; faster</option>
         </select>
       </div>
+
+      <!-- Live estimate strip -->
+      <div id="estimateStrip" class="hidden" style="
+        background:var(--card3);border:1px solid var(--border);
+        border-radius:6px;padding:10px 14px;font-size:0.8em;
+        font-family:'Lora',serif;font-style:italic;color:var(--muted);
+        line-height:1.7;margin-top:4px;">
+      </div>
     </div>
 
   </div>
 
-  <!-- Controls -->
+  <!-- Free Tier Guide -->
+  <div class="section-rule"><span>✦ Free Tier Guide</span></div>
+
+  <div class="card" id="freeTierCard">
+    <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none"
+         onclick="toggleGuide()">
+      <div class="card-title" style="margin-bottom:0">
+        <span class="ti">📋</span> How to get the most out of the free tier
+      </div>
+      <span id="guideChevron" style="color:var(--gold-dim);font-size:1.1em;transition:transform 0.25s">▼</span>
+    </div>
+
+    <div id="guideBody" style="display:none;margin-top:20px">
+
+      <!-- Quick-reference grid -->
+      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
+        <div class="stat-box">
+          <div class="stat-num">250</div>
+          <div class="stat-label">Free requests / day</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">10</div>
+          <div class="stat-label">Requests / minute</div>
+        </div>
+        <div class="stat-box">
+          <div class="stat-num">~1.8</div>
+          <div class="stat-label">400-page books / day</div>
+        </div>
+      </div>
+
+      <!-- Page calculator -->
+      <div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:16px 18px;margin-bottom:18px">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1em;color:var(--white);margin-bottom:12px;font-weight:600">
+          📐 Request Calculator
+        </div>
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div style="flex:1;min-width:120px">
+            <label style="margin-bottom:4px">Book page count</label>
+            <input type="number" id="calcPages" value="100" min="1" max="2000"
+                   oninput="updateCalc()" style="width:100%">
+          </div>
+          <div style="flex:1;min-width:120px">
+            <label style="margin-bottom:4px">Batch size</label>
+            <select id="calcBatch" onchange="updateCalc()" style="width:100%">
+              <option value="2">2 pages</option>
+              <option value="3" selected>3 pages</option>
+              <option value="4">4 pages</option>
+            </select>
+          </div>
+        </div>
+        <div id="calcResult" style="
+          margin-top:14px;background:var(--card3);border-radius:6px;
+          padding:12px 14px;font-family:'Lora',serif;font-size:0.84em;
+          font-style:italic;color:var(--text);line-height:1.9;
+          border-left:3px solid var(--gold-dim)">
+        </div>
+      </div>
+
+      <!-- Tips list -->
+      <div style="font-family:'Lora',serif;font-size:0.88em;line-height:2;color:var(--text2)">
+        <div style="font-family:'Cormorant Garamond',serif;font-size:1em;color:var(--white);margin-bottom:10px;font-weight:600">
+          ✦ Best practices
+        </div>
+
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 24px">
+          <div>
+            <span style="color:var(--gold)">Use batch size 3</span><br>
+            Best balance of speed and reliability. Batch 4 risks hitting
+            the 6,000-token-per-minute input ceiling on dense pages.
+          </div>
+          <div>
+            <span style="color:var(--gold)">Translate in chapters</span><br>
+            Use Start/End page to translate 50–80 pages at a time.
+            Pause between sessions to conserve daily quota.
+          </div>
+          <div>
+            <span style="color:var(--gold)">Quota resets at midnight PT</span><br>
+            Pacific Time (UTC-7/8). Plan heavy jobs for just after midnight
+            to get a full fresh 250 requests.
+          </div>
+          <div>
+            <span style="color:var(--gold)">One book per sitting</span><br>
+            A 400-page book uses ~134 requests (54% of daily quota).
+            Save the remaining ~116 for a second shorter book the same day.
+          </div>
+          <div>
+            <span style="color:var(--gold)">Stop &amp; download anytime</span><br>
+            Hit Stop and download a partial PDF. Come back tomorrow and
+            set Start Page to where you left off.
+          </div>
+          <div>
+            <span style="color:var(--gold)">Enable billing for $0</span><br>
+            Adding a card at <a href="https://aistudio.google.com" target="_blank"
+            style="color:var(--gold-dim)">aistudio.google.com</a> unlocks Tier 1
+            (higher limits) with no charge unless you exceed free amounts.
+          </div>
+        </div>
+
+        <div style="margin-top:16px;background:rgba(196,144,48,0.06);border:1px solid var(--gold-dim);
+             border-radius:6px;padding:10px 14px;color:var(--muted);font-size:0.85em">
+          ⚠ Free tier data may be used by Google to improve their models.
+          For private or sensitive documents, enable billing to opt out.
+        </div>
+      </div>
+    </div>
+  </div>
   <div class="section-rule"><span>✦ Controls</span></div>
 
   <div class="card">
@@ -686,6 +799,71 @@ let paused = false, stopped = false, pagesDone = 0, startTime = null;
 const serverUrl = window.location.origin;
 
 const RTL_LANGS = new Set(['ar', 'he', 'fa', 'ur']);
+
+// ── Free Tier Guide ────────────────────────────────────────────
+function toggleGuide() {
+  const body = document.getElementById('guideBody');
+  const chevron = document.getElementById('guideChevron');
+  const open = body.style.display !== 'none';
+  body.style.display = open ? 'none' : 'block';
+  chevron.style.transform = open ? '' : 'rotate(180deg)';
+  if (!open) updateCalc();
+}
+
+// Live estimate strip under the settings card
+function updateEstimate() {
+  const strip = document.getElementById('estimateStrip');
+  const start = parseInt(document.getElementById('startPage').value) || 1;
+  const end   = parseInt(document.getElementById('endPage').value)   || totalPages;
+  const batch = parseInt(document.getElementById('batchSize').value) || 3;
+  if (!end || end < start) { strip.classList.add('hidden'); return; }
+
+  const pages    = end - start + 1;
+  const requests = Math.ceil(pages / batch);
+  const minSecs  = requests * 20; // ~20s per batch (6s delay + ~14s processing)
+  const mins     = Math.round(minSecs / 60);
+  const quota    = Math.round(requests / 250 * 100);
+  const quotaCol = quota > 80 ? '#c07070' : quota > 50 ? '#b89040' : '#5daa72';
+
+  strip.classList.remove('hidden');
+  strip.innerHTML = `
+    <span style="color:var(--gold)">${pages} pages</span>
+    &rarr; <strong style="color:var(--white)">${requests} API requests</strong>
+    &nbsp;&middot;&nbsp; ~${mins} min
+    &nbsp;&middot;&nbsp; <span style="color:${quotaCol}">${quota}% of daily free quota</span>
+    ${quota > 90
+      ? '<br><span style="color:#c07070">⚠ Near daily limit — consider splitting across two days</span>'
+      : quota > 50
+      ? '<br><span style="color:#b89040">Tip: save the rest of your quota for another book today</span>'
+      : ''}`;
+}
+
+// Calculator inside the guide panel
+function updateCalc() {
+  const pages   = parseInt(document.getElementById('calcPages').value)  || 100;
+  const batch   = parseInt(document.getElementById('calcBatch').value)  || 3;
+  const requests = Math.ceil(pages / batch);
+  const totalSec = requests * 20;
+  const mins     = Math.floor(totalSec / 60);
+  const secs     = totalSec % 60;
+  const quota    = Math.round(requests / 250 * 100);
+  const books250 = Math.floor(250 / requests * 10) / 10;
+  const quotaCol = quota > 80 ? '#c07070' : quota > 50 ? '#b89040' : '#5daa72';
+  const timeStr  = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
+
+  document.getElementById('calcResult').innerHTML = `
+    <b style="color:var(--white)">${pages} pages</b> at batch size ${batch}
+    = <b style="color:var(--gold)">${requests} API requests</b><br>
+    Estimated time: <b style="color:var(--white)">${timeStr}</b>
+    &nbsp;&middot;&nbsp;
+    Daily quota used: <b style="color:${quotaCol}">${quota}%</b>
+    (${250 - requests} requests remaining)<br>
+    You can translate roughly <b style="color:var(--gold)">${books250} books</b>
+    of this size per day on the free tier.
+    ${quota > 100
+      ? `<br><span style="color:#c07070">⚠ Exceeds one day's quota — split across ${Math.ceil(quota/100)} days or use Start/End page.</span>`
+      : ''}`;
+}
 
 // ── Server init ────────────────────────────────────────────────
 window.addEventListener('load', async () => {
@@ -775,6 +953,7 @@ async function handleFile(file) {
       <div class="fi-meta">${totalPages} pages &middot; ${(file.size/1024/1024).toFixed(1)} MB</div>
     </div>`;
   log(`✓ Loaded: ${file.name} (${totalPages} pages)`, 'ok');
+  updateEstimate();
 }
 
 // ── Page Rendering ─────────────────────────────────────────────
