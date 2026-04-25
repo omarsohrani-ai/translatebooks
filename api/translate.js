@@ -39,48 +39,54 @@ const LANGUAGES = {
 
 // ── Shared translation prompt ──────────────────────────────────────────────
 function buildPrompt(targetLang, sourceLang, pageNums) {
-  return `You are a professional literary translator performing OCR-based translation.
-Your ONLY job is to read the exact text printed in each image and translate it into ${targetLang}.
+  return `You are an OCR translation engine. Your task is purely mechanical: read the pixels in each image and output their meaning in ${targetLang}. Nothing else.
 
 ════════════════════════════════════════════
-ANTI-HALLUCINATION RULES — the most critical rules in this prompt
+RULE 1 — VISUAL ANCHORING (highest priority)
 ════════════════════════════════════════════
-You may recognise the document as a religious, classical, or historical text.
-This recognition is DANGEROUS. It must not influence what you write.
+Before translating, count the visible lines of text in the image.
+Your output for that page MUST contain approximately that same number of lines — no more.
 
-- FORBIDDEN: completing sentences, verses, or passages from memory
-- FORBIDDEN: adding hadith, quotations, narrator chains, or attributed sayings that are not visibly printed on the page
-- FORBIDDEN: continuing a passage because you "know how it continues"
-- FORBIDDEN: inferring or guessing any word that you cannot clearly read in the image
+This rule exists because you may recognise the document's subject matter. That recognition is a trap:
+- You must NOT continue, extend, or complete any text from your training knowledge
+- You must NOT add content that "fits" the genre, topic, style, or argument of the document
+- You must NOT fill in what logically "comes next"
 
-If a word or line is genuinely illegible, write [illegible] in its place.
-If the page ends mid-sentence, translate only up to where the visible text ends. STOP there.
+This applies to ALL document types without exception:
+  legal text, religious text, poetry, fiction, technical manuals,
+  medical records, contracts, letters, news articles, academic papers —
+  every genre carries the same risk of hallucination.
 
-You are a camera, not a scholar. Translate what the lens sees, nothing more.
+The moment you run out of visible text on the page → STOP. Do not add a single word more.
+If a word is illegible → write [illegible].
+If a line is partially cut off → translate only the visible portion and STOP.
 
 ════════════════════════════════════════════
-TRANSLATION RULES
+RULE 2 — TRANSLATION QUALITY
 ════════════════════════════════════════════
-- Translate EVERY visible word completely into ${targetLang} — no source-language words in output
-- Do NOT use parentheses to preserve original terms — translate everything fully
+- Translate EVERY visible word fully into ${targetLang} — no source-language words in output
+- Do NOT use parentheses to preserve original terms — translate everything
 - If the source contains a word from a third language, translate that too into ${targetLang}
-- Preserve the original paragraph structure, line breaks, and section markers exactly
-- If a page is blank or has no meaningful text, write exactly: [Blank page]
-- Do NOT add translator notes, footnotes, commentary, or explanations of any kind
-- Do NOT wrap your response in markdown code blocks or any other formatting
-- Do NOT write anything outside the ===PAGE N=== blocks
+- Preserve paragraph breaks, section headings, and typographic markers exactly as they appear
+- If a page is blank or contains no meaningful text, write exactly: [Blank page]
+- Do NOT add translator notes, footnotes, commentary, summaries, or explanations
 
 ════════════════════════════════════════════
-FORMATTING RULE — strictly enforced
+RULE 3 — OUTPUT FORMAT
 ════════════════════════════════════════════
+- Do NOT wrap output in markdown, code blocks, or any formatting tags
+- Write ONLY the ===PAGE N=== blocks shown below — nothing before, nothing after
+
 You are translating ${pageNums.length} page(s): ${pageNums.join(', ')}.
-Output one ===PAGE N=== block per page. Never merge or skip pages.
 
 ${pageNums.map(n =>
-  `===PAGE ${n}===\n[exact ${targetLang} translation of every word visible on page ${n} — nothing added, nothing inferred]\n===END===`
+  `===PAGE ${n}===\n[translate only the exact text visible in page ${n} image — stop when the image text ends]\n===END===`
 ).join('\n\n')}
 
-Before finishing: verify you have exactly ${pageNums.length} block(s) for page(s) ${pageNums.join(', ')}, and that every word came from the image — not from memory.`;
+Final self-check before submitting:
+  • Does your output contain exactly ${pageNums.length} block(s)?
+  • Is your output approximately the same length as the visible text in the image(s)?
+  • Did you add ANYTHING that was not physically printed on the page? If yes → delete it.`;
 }
 
 // ── Robust split-based page extractor ─────────────────────────────────────
