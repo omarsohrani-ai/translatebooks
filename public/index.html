@@ -1279,7 +1279,12 @@ async function pollJob(id) {
     }
     qBanner.classList.add('hidden');
     if (d.status === 'done') return d.translations;
-    if (d.status === 'error') throw new Error(d.error);
+    if (d.status === 'error') {
+      const e = new Error(d.error);
+      // Tag quota errors so the caller can detect them without string parsing
+      if (d.error && d.error.includes('QUOTA_EXHAUSTED')) e._quotaExhausted = true;
+      throw e;
+    }
   }
 }
 
@@ -1334,9 +1339,61 @@ async function startTranslation() {
       updatePreview(batch, result);
       log(`✓ Pages ${batch.join(', ')} done`, 'ok');
     } catch(err) {
-      log(`✗ Error on pages ${batch.join(',')}: ${err.message}`, 'err');
-      log('Retrying in 8 seconds…', 'warn');
-      await new Promise(r => setTimeout(r, 8000));
+      const msg = err.message || '';
+
+      // ── Daily quota exhausted — stop immediately, no point retrying ──
+      if (err._quotaExhausted ||
+          msg.includes('GenerateRequestsPerDayPerProjectPerModel') ||
+          (msg.includes('429') && msg.includes('limit: 20'))) {
+
+        // Extract suggested retry delay from error if present
+        const retryMatch = msg.match(/Please retry in ([\d.]+)s/);
+        const resetMsg = retryMatch
+          ? `Quota resets in ~${Math.ceil(retryMatch[1] / 60)} minutes (midnight Pacific Time).`
+          : 'Quota resets at midnight Pacific Time (UTC-7).';
+
+        log(`✗ Daily quota exhausted on pages ${batch.join(',')}`, 'err');
+        log(`⏰ ${resetMsg}`, 'warn');
+        log('💡 Options: (1) Wait for midnight PT reset  (2) Create a new Google Cloud project with a fresh API key  (3) Enable billing at aistudio.google.com (~$0.30 for a 400-page book)', 'warn');
+
+        if (Object.keys(translations).length > 0) {
+          log('⬇ Partial results available — downloading what was completed…', 'info');
+          document.getElementById('downloadBtn').classList.remove('hidden');
+        }
+        stopped = true;
+        break;
+      }
+
+      // ── 503 / transient server error — retry up to 3 times ──
+      if (msg.includes('503') || msg.includes('Service Unavailable') ||
+          msg.includes('high demand')) {
+        const retries = (err._retries || 0) + 1;
+        if (retries <= 3) {
+          err._retries = retries;
+          log(`✗ Server busy (attempt ${retries}/3) — retrying in 30 seconds…`, 'warn');
+          await new Promise(r => setTimeout(r, 30000));
+          p -= batchSize;
+          continue;
+        }
+        log(`✗ Server unavailable after 3 attempts — skipping pages ${batch.join(',')}`, 'err');
+        continue;
+      }
+
+      // ── RPM rate limit (per-minute, not per-day) — wait and retry ──
+      if (msg.includes('GenerateRequestsPerMinutePerProject') ||
+          msg.includes('GenerateContentInputTokens')) {
+        const retryMatch = msg.match(/Please retry in ([\d.]+)s/);
+        const wait = retryMatch ? Math.ceil(retryMatch[1]) * 1000 + 2000 : 35000;
+        log(`✗ Per-minute rate limit hit — waiting ${Math.ceil(wait/1000)}s…`, 'warn');
+        await new Promise(r => setTimeout(r, wait));
+        p -= batchSize;
+        continue;
+      }
+
+      // ── Unknown error — retry once after 15 seconds ──
+      log(`✗ Error on pages ${batch.join(',')}: ${msg.slice(0, 120)}`, 'err');
+      log('Retrying in 15 seconds…', 'warn');
+      await new Promise(r => setTimeout(r, 15000));
       p -= batchSize;
     }
   }
