@@ -45,12 +45,24 @@ function buildPrompt(targetLang, sourceLang, pageNums) {
 RULE 1 — VISUAL ANCHORING (highest priority)
 ════════════════════════════════════════════
 Before translating, count the visible lines of text in the image.
-Your output for that page MUST contain approximately that same number of lines — no more.
+Multiply that count by 10 — that is the MAXIMUM number of words your translation
+should contain. If you see 20 lines → your output must be at most ~200 words.
+If you see 30 lines → at most ~300 words. Stay within this budget.
 
 This rule exists because you may recognise the document's subject matter. That recognition is a trap:
 - You must NOT continue, extend, or complete any text from your training knowledge
 - You must NOT add content that "fits" the genre, topic, style, or argument of the document
 - You must NOT fill in what logically "comes next"
+
+SPECIFICALLY FORBIDDEN for ALL document types — these are stock phrases your
+training data contains that are NOT printed on any real page you will ever be given:
+  ✗ Book introductions, prefaces, forewords, or dedications
+  ✗ Translator's notes ("I have been asked to translate...", "I have endeavoured...")
+  ✗ Author's acknowledgements or opening prayers of praise
+  ✗ Chapter summaries or editorial commentary
+  ✗ Legal boilerplate, terms-and-conditions expansions
+  ✗ Medical disclaimers or standard clinical text
+  ✗ Any passage that begins with "In the name of God..." unless those exact words appear in the image
 
 This applies to ALL document types without exception:
   legal text, religious text, poetry, fiction, technical manuals,
@@ -90,8 +102,9 @@ ${pageNums.map(n =>
 
 Final self-check before submitting:
   • Does your output contain exactly ${pageNums.length} block(s)?
-  • Is your output approximately the same length as the visible text in the image(s)?
-  • Did you add ANYTHING that was not physically printed on the page? If yes → delete it.`;
+  • Word count: is it within the lines × 10 budget you estimated?
+  • Did you add ANYTHING that was not physically printed on the page?
+  • Does it contain a preface, introduction, or translator's note? If yes → delete it entirely.`;
 }
 
 // ── Robust split-based page extractor ─────────────────────────────────────
@@ -112,6 +125,23 @@ function extractPages(raw, pageNums) {
     const pn      = parseInt(segments[i], 10);
     const content = segments[i + 1].replace(/\n?===END===\n?/gi, '').trim();
     if (content) blocks[pn] = deduplicateContent(content);
+  }
+
+  // ── Fallback: no PAGE markers found ───────────────────────────────────────
+  // Happens when: (a) AI ignores format instructions, (b) Gemini silent
+  // RECITATION returns a refusal sentence instead of throwing an exception,
+  // (c) response is otherwise well-formed but lacks the delimiters.
+  // Recovery: strip any stray markers and treat the full response as content.
+  if (Object.keys(blocks).length === 0) {
+    const fallback = text
+      .replace(/===END===/gi, '')
+      .replace(/===PAGE\s*\d+===/gi, '')
+      .trim();
+    if (fallback && fallback.length > 10) {
+      const firstPage = pageNums[0];
+      blocks[firstPage] = deduplicateContent(fallback);
+      console.log(`[translate] No PAGE markers — fallback: full response assigned to page ${firstPage}`);
+    }
   }
 
   const parsed = {};
@@ -297,7 +327,15 @@ async function processWithGemini(job) {
   parts.push({ text: buildPrompt(targetLang, sourceLang, job.pageNums) });
 
   const result = await model.generateContent(parts);
-  return result.response.text();
+  const raw = result.response.text();
+
+  // Gemini sometimes returns an empty string instead of throwing when its
+  // safety filter (RECITATION) silently blocks classical/religious content.
+  // Treat empty as RECITATION so the caller can fall back to Groq.
+  if (!raw || raw.trim().length < 5) {
+    throw new Error('RECITATION: Gemini returned empty response (silent safety filter)');
+  }
+  return raw;
 }
 
 // ── Provider: Groq (Llama 4 Scout) ────────────────────────────────────────
