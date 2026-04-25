@@ -147,22 +147,8 @@
 
 <div class="main">
 
-  <!-- SERVER CONFIG -->
-  <div class="card" id="serverCard">
-    <h2><span class="icon">⚙️</span> Server Configuration</h2>
-    <div class="alert alert-info">
-      <span>ℹ️</span>
-      <span>Enter your backend server URL below. Deploy the <code>api/translate.js</code> file to Vercel, then paste your Vercel URL here. <a href="#setup-guide" style="color:#79c0ff">See setup guide ↓</a></span>
-    </div>
-    <div class="server-cfg">
-      <p>Your Vercel backend URL (e.g. <strong>https://your-app.vercel.app</strong>)</p>
-      <div class="server-url-row">
-        <input type="text" id="serverUrl" placeholder="https://your-app.vercel.app" value="">
-        <button class="btn btn-blue" onclick="testServer()">Test Connection</button>
-      </div>
-    </div>
-    <div id="serverStatus"></div>
-  </div>
+  <!-- SERVER STATUS (small, unobtrusive) -->
+  <div id="serverStatus" style="margin-bottom:12px;"></div>
 
   <!-- UPLOAD + SETTINGS -->
   <div class="grid2">
@@ -251,50 +237,7 @@
     <div class="preview-box" id="previewBox"><em style="color:var(--muted)">Translations will appear here as each batch completes...</em></div>
   </div>
 
-  <!-- SETUP GUIDE -->
-  <div class="card" id="setup-guide">
-    <h2><span class="icon">🚀</span> Setup Guide — Deploy Your Free Backend</h2>
-    <div class="alert alert-warn">
-      <span>⚠️</span>
-      <span>You need to deploy the backend once. It's free and takes about 5 minutes.</span>
-    </div>
 
-    <div class="step">
-      <div class="step-num">1</div>
-      <div class="step-body">
-        <h4>Get a free Google Gemini API Key</h4>
-        <p>Go to <strong>aistudio.google.com</strong> → Sign in with Gmail → Click "Get API Key" → Create API key. Copy it.</p>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num">2</div>
-      <div class="step-body">
-        <h4>Create a free GitHub account</h4>
-        <p>Go to <strong>github.com</strong> → Sign up free → Create a new repository → Upload the project files (<code>api/translate.js</code>, <code>package.json</code>, <code>vercel.json</code>, this <code>index.html</code>)</p>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num">3</div>
-      <div class="step-body">
-        <h4>Deploy to Vercel (free)</h4>
-        <p>Go to <strong>vercel.com</strong> → Sign in with GitHub → Click "New Project" → Import your GitHub repo → Click Deploy. Done!</p>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num">4</div>
-      <div class="step-body">
-        <h4>Add your Gemini API Key to Vercel</h4>
-        <p>In Vercel → Your Project → Settings → Environment Variables → Add: <code>GEMINI_API_KEY</code> = your key → Redeploy.</p>
-      </div>
-    </div>
-    <div class="step">
-      <div class="step-num">5</div>
-      <div class="step-body">
-        <h4>Enter your Vercel URL above</h4>
-        <p>Copy your Vercel project URL (like <code>https://your-app.vercel.app</code>) and paste it in the Server Configuration box at the top of this page.</p>
-      </div>
-    </div>
-  </div>
 
 </div><!-- end main -->
 
@@ -304,17 +247,25 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs
 // ── State ──────────────────────────────────────────────
 let pdfDoc = null, totalPages = 0, translations = {}, paused = false, stopped = false;
 let pagesDone = 0, startTime = null;
-let serverUrl = localStorage.getItem('serverUrl') || '';
+
+// Auto-detect server URL (same origin — works perfectly on Vercel)
+const serverUrl = window.location.origin;
 
 // ── Init ───────────────────────────────────────────────
-document.getElementById('serverUrl').value = serverUrl;
-document.getElementById('serverUrl').addEventListener('change', e => {
-  serverUrl = e.target.value.trim().replace(/\/$/, '');
-  localStorage.setItem('serverUrl', serverUrl);
+// Auto-connect on load silently
+window.addEventListener('load', async () => {
+  try {
+    const r = await fetch(`${serverUrl}/api/translate?action=queue`);
+    if (r.ok) {
+      document.getElementById('serverStatus').innerHTML =
+        '<div style="background:rgba(35,134,54,0.15);border:1px solid rgba(35,134,54,0.4);border-radius:8px;padding:8px 14px;font-size:0.82em;color:#3fb950;margin-bottom:4px;">✅ AI Translation Server — Online & Ready</div>';
+      loadLanguages();
+    }
+  } catch(e) {
+    document.getElementById('serverStatus').innerHTML =
+      '<div style="background:rgba(218,54,51,0.1);border:1px solid rgba(218,54,51,0.3);border-radius:8px;padding:8px 14px;font-size:0.82em;color:#f85149;margin-bottom:4px;">⚠️ Server offline — please check your deployment</div>';
+  }
 });
-
-// Load languages from server on startup
-window.addEventListener('load', () => { if (serverUrl) loadLanguages(); });
 
 async function loadLanguages() {
   try {
@@ -361,21 +312,7 @@ function populateLangs(langs) {
 }
 populateLangs(FALLBACK_LANGS);
 
-// ── Server test ────────────────────────────────────────
-async function testServer() {
-  serverUrl = document.getElementById('serverUrl').value.trim().replace(/\/$/, '');
-  localStorage.setItem('serverUrl', serverUrl);
-  const el = document.getElementById('serverStatus');
-  el.innerHTML = '<div class="alert alert-info">⏳ Testing connection...</div>';
-  try {
-    const r = await fetch(`${serverUrl}/api/translate?action=queue`);
-    const d = await r.json();
-    el.innerHTML = `<div class="alert alert-success">✅ Connected! Server is online. Queue length: ${d.queueLength}</div>`;
-    loadLanguages();
-  } catch(e) {
-    el.innerHTML = `<div class="alert" style="background:rgba(218,54,51,0.1);border:1px solid rgba(218,54,51,0.3);color:#f85149;">❌ Could not connect. Check your URL and make sure the backend is deployed.</div>`;
-  }
-}
+
 
 // ── File Upload ────────────────────────────────────────
 const dropZone = document.getElementById('dropZone');
