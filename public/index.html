@@ -1414,6 +1414,15 @@ async function startTranslation() {
     } catch(err) {
       const msg = err.message || '';
 
+      // ── Gemini RECITATION / SAFETY block ──────────────────────────────
+      if (msg.includes('RECITATION') || msg.includes('recitation') || msg.includes('SAFETY')) {
+        log(`✗ Gemini safety block on pages ${batch.join(',')} — switching to Groq for this batch…`, 'warn');
+        // Server handles the Groq fallback automatically — just retry once without delay
+        await new Promise(r => setTimeout(r, 3000));
+        p -= batchSize;
+        continue;
+      }
+
       // ── Daily quota exhausted — stop immediately, no point retrying ──
       if (err._quotaExhausted ||
           msg.includes('GenerateRequestsPerDayPerProjectPerModel') ||
