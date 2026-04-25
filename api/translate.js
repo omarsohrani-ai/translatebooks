@@ -67,11 +67,10 @@ function extractPages(raw, pageNums) {
 async function processJob(job) {
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
 
-  // gemini-2.5-flash: best quality / free-quota balance for literary translation.
-  // Free tier: 10 RPM, ~250 RPD.
-  // Avoid gemini-2.0-flash (deprecated March 2026) and
-  // gemini-2.5-flash-lite (lower quality — leaks untranslated source words).
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
+  // gemini-2.5-flash-lite: best for free tier — 1,000 RPD, 15 RPM.
+  // gemini-2.5-flash has higher quality but only 20 RPD free (exhausted fast).
+  // To upgrade: enable billing and switch back to "gemini-2.5-flash" (~$0.20/400 pages).
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
 
   const targetLang = LANGUAGES[job.targetLang] || "English";
   const sourceLang = job.sourceLang === "auto"
@@ -137,8 +136,8 @@ async function runQueue() {
       if (jobResults[j.id]) jobResults[j.id].queuePos = idx + 1;
     });
 
-    // 6 s gap keeps us inside the 10 RPM free-tier limit for gemini-2.5-flash
-    await new Promise(r => setTimeout(r, 6000));
+    // 4 s gap keeps us inside the 15 RPM free-tier limit for gemini-2.5-flash-lite
+    await new Promise(r => setTimeout(r, 4000));
   }
 
   isProcessing = false;
