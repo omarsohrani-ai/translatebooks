@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DocuTranslate — AI Literary Translator</title>
 
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&family=Noto+Nastaliq+Urdu:wght@400;700&display=swap" rel="stylesheet">
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
@@ -669,7 +669,10 @@ select:focus, input:focus {
   <span class="footer-ornament">❧</span>
   Powered by Google Gemini AI
   <span class="footer-ornament">❧</span>
-  AI translations may require editorial review
+  <a href="https://translatebooks.vercel.app" target="_blank"
+     style="color:var(--gold-dim);text-decoration:none;letter-spacing:0.04em">
+    translatebooks.vercel.app
+  </a>
 </footer>
 
 <!-- ─────────────────────────── SCRIPT ──────────────────────── -->
@@ -937,9 +940,9 @@ function updatePreview(batch, result) {
     if (isRTL) {
       d.style.direction = 'rtl';
       d.style.textAlign = 'right';
-      d.style.fontFamily = "'Amiri','Noto Naskh Arabic',serif";
-      d.style.fontSize = '1.06em';
-      d.style.lineHeight = '2.1';
+      d.style.fontFamily = "'Noto Nastaliq Urdu','Jameel Noori Nastaleeq','Amiri',serif";
+      d.style.fontSize = '1.1em';
+      d.style.lineHeight = '2.6';
     }
     box.appendChild(d);
   }
@@ -970,6 +973,32 @@ async function downloadPDF() {
   const isRTL = RTL_LANGS.has(tgtLangCode);
 
   log('Composing PDF…', 'info');
+
+  // Strip emoji and non-ASCII so jsPDF (Latin fonts only) renders cleanly
+  function pdfSafe(str) {
+    return str.replace(/[^\x20-\x7E]/g, '').trim();
+  }
+  const safeSrc = pdfSafe(srcName) || srcName.split(' ').slice(1).join(' ') || 'Auto-detect';
+  const safeTgt = pdfSafe(tgtName) || tgtName.split(' ').slice(1).join(' ') || tgtName;
+  const siteUrl = 'translatebooks.vercel.app';
+
+  // ── Watermark helper ────────────────────────────────────────
+  function addWatermark() {
+    doc.setGState(new doc.GState({ opacity: 0.055 }));
+    doc.setFont('times', 'bolditalic');
+    doc.setFontSize(52);
+    doc.setTextColor(160, 120, 40);
+    doc.text('DocuTranslate', W/2, H/2 + 14, { align: 'center', angle: 42 });
+    doc.setGState(new doc.GState({ opacity: 1.0 }));
+  }
+
+  // ── Footer helper ───────────────────────────────────────────
+  function addFooter() {
+    doc.setFontSize(6.5);
+    doc.setFont('times', 'italic');
+    doc.setTextColor(140, 108, 60);
+    doc.text(siteUrl, W/2, H - 7, { align: 'center' });
+  }
 
   // ── Title page ──────────────────────────────────────────────
   doc.setFillColor(9, 7, 4);
@@ -1002,15 +1031,15 @@ async function downloadPDF() {
   doc.setTextColor(100, 76, 24);
   doc.setFontSize(14);
   doc.setFont('times', 'normal');
-  doc.text('✦', W/2, 92, { align: 'center' });
+  doc.text('- o -', W/2, 92, { align: 'center' });
 
-  // Metadata
+  // Metadata (ASCII-safe names only — jsPDF cannot render non-Latin glyphs)
   doc.setFont('times', 'normal');
   doc.setFontSize(10);
   doc.setTextColor(120, 96, 56);
   const meta = [
-    `Source Language: ${srcName}`,
-    `Translated into: ${tgtName}`,
+    `Source Language: ${safeSrc}`,
+    `Translated into: ${safeTgt}`,
     `Pages translated: ${Object.keys(translations).length}`,
   ];
   meta.forEach((line, i) => doc.text(line, W/2, 106 + i * 11, { align: 'center' }));
@@ -1023,7 +1052,7 @@ async function downloadPDF() {
 
   doc.setFont('times', 'italic');
   doc.setFontSize(7.5);
-  doc.text('Powered by Google Gemini AI  ·  DocuTranslate', W/2, H-17, { align: 'center' });
+  doc.text(`Powered by Google Gemini AI  *  ${siteUrl}`, W/2, H-17, { align: 'center' });
 
   doc.addPage();
 
@@ -1040,7 +1069,7 @@ async function downloadPDF() {
     doc.setFont('times', 'italic');
     doc.setTextColor(120, 96, 56);
     doc.text('DocuTranslate', mL, 9);
-    doc.text(`Page ${pageNum}${cont ? ' (cont.)' : ''}  ·  ${tgtName}`, W - mR, 9, { align: 'right' });
+    doc.text(`Page ${pageNum}${cont ? ' (cont.)' : ''}  *  ${safeTgt}`, W - mR, 9, { align: 'right' });
   }
 
   // ── RTL path: html2canvas ──────────────────────────────────
@@ -1060,15 +1089,16 @@ async function downloadPDF() {
         doc.setTextColor(160, 140, 100);
         doc.setFont('times', 'italic');
         doc.text(`— Page ${pn}: Blank —`, W/2, H/2, { align: 'center' });
+        addWatermark();
+        addFooter();
         doc.addPage();
         continue;
       }
-
-      // Render RTL text in hidden browser div
       const SCALE = 2;
       const PX_MM = 96 / 25.4;
       const divW = Math.round(cW * PX_MM * SCALE);
-      const divH = Math.round((H - 16 - mB) * PX_MM * SCALE);
+      const imgH = H - 16 - mB - 10; // leave 10mm for footer
+      const divH = Math.round(imgH * PX_MM * SCALE);
 
       const div = document.createElement('div');
       div.style.cssText = [
@@ -1077,9 +1107,9 @@ async function downloadPDF() {
         'overflow:hidden',
         'background:#fefbf4',
         'color:#1c1408',
-        "font-family:'Amiri','Noto Naskh Arabic','Arial Unicode MS',serif",
+        "font-family:'Noto Nastaliq Urdu','Jameel Noori Nastaleeq','Amiri',serif",
         `font-size:${Math.round(12 * SCALE)}px`,
-        'line-height:2.15',
+        'line-height:2.6',
         'direction:rtl',
         'text-align:justify',
         `padding:${Math.round(10 * SCALE)}px ${Math.round(14 * SCALE)}px`,
@@ -1100,12 +1130,15 @@ async function downloadPDF() {
           height: divH
         });
         doc.addImage(canvas.toDataURL('image/jpeg', 0.93),
-          'JPEG', mL, 16, cW, H - 16 - mB);
+          'JPEG', mL, 16, cW, imgH);
+        addWatermark();
+        addFooter();
         log(`✓ RTL page ${pn} rendered`, 'ok');
       } catch(e) {
         doc.setFontSize(9);
         doc.setTextColor(160, 60, 60);
         doc.text(`[Rendering error on page ${pn}]`, mL, mT + 5);
+        addFooter();
         log(`⚠ Canvas error page ${pn}: ${e.message}`, 'warn');
       } finally {
         document.body.removeChild(div);
@@ -1129,9 +1162,14 @@ async function downloadPDF() {
         doc.setTextColor(160, 140, 100);
         doc.setFont('times', 'italic');
         doc.text(`— Page ${pn}: Blank —`, W/2, H/2, { align: 'center' });
+        addWatermark();
+        addFooter();
         doc.addPage();
         continue;
       }
+
+      // Watermark goes BEHIND text — place before text rendering
+      addWatermark();
 
       doc.setTextColor(28, 20, 8);
       doc.setFontSize(11);
@@ -1142,11 +1180,13 @@ async function downloadPDF() {
       const lH = 6.4;
 
       for (const line of lines) {
-        if (y + lH > H - mB) {
+        if (y + lH > H - mB - 10) {
+          addFooter();
           doc.addPage();
           doc.setFillColor(254, 251, 244);
           doc.rect(0, 0, W, H, 'F');
           drawHeader(pn, true);
+          addWatermark();
           doc.setTextColor(28, 20, 8);
           doc.setFontSize(11);
           doc.setFont('times', 'normal');
@@ -1156,6 +1196,7 @@ async function downloadPDF() {
         y += lH;
       }
 
+      addFooter();
       doc.addPage();
     }
   }
@@ -1163,7 +1204,7 @@ async function downloadPDF() {
   // Remove trailing blank page
   if (doc.getNumberOfPages() > 1) doc.deletePage(doc.getNumberOfPages());
 
-  const fname = `DocuTranslate_${tgtName}_${new Date().toISOString().slice(0,10)}.pdf`;
+  const fname = `DocuTranslate_${safeTgt}_${new Date().toISOString().slice(0,10)}.pdf`;
   doc.save(fname);
   log(`✅ Downloaded: ${fname}`, 'ok');
 }
