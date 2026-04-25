@@ -44,10 +44,11 @@ function buildPrompt(targetLang, sourceLang, pageNums) {
 ════════════════════════════════════════════
 RULE 1 — VISUAL ANCHORING (highest priority)
 ════════════════════════════════════════════
-Before translating, count the visible lines of text in the image.
-Multiply that count by 10 — that is the MAXIMUM number of words your translation
-should contain. If you see 20 lines → your output must be at most ~200 words.
-If you see 30 lines → at most ~300 words. Stay within this budget.
+Before translating, silently count the visible lines of text in the image.
+Multiply that count by 10 — that is your internal word budget.
+This is a private calculation: do NOT write the word count, line count,
+or any meta-commentary in your output. Your output contains ONLY translated text.
+Example internal budget: 20 visible lines → ~200 words max output.
 
 This rule exists because you may recognise the document's subject matter. That recognition is a trap:
 - You must NOT continue, extend, or complete any text from your training knowledge
@@ -102,9 +103,9 @@ ${pageNums.map(n =>
 
 Final self-check before submitting:
   • Does your output contain exactly ${pageNums.length} block(s)?
-  • Word count: is it within the lines × 10 budget you estimated?
-  • Did you add ANYTHING that was not physically printed on the page?
-  • Does it contain a preface, introduction, or translator's note? If yes → delete it entirely.`;
+  • Is the output length proportional to the text visible in the image?
+  • Did you add ANYTHING not physically printed on the page? If yes → delete it.
+  • Does it contain a preface, introduction, translator's note, or word count? If yes → delete it.`;
 }
 
 // ── Robust split-based page extractor ─────────────────────────────────────
@@ -112,7 +113,12 @@ function extractPages(raw, pageNums) {
   let text = raw
     .replace(/^```[\w]*\n?/m, '').replace(/\n?```\s*$/m, '')
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    // Strip meta-commentary the AI sometimes leaks into output
+    .replace(/\[word count[^\]]*\]/gi, '')
+    .replace(/\[line count[^\]]*\]/gi, '')
+    .replace(/\[translation (note|end|complete)[^\]]*\]/gi, '')
+    .replace(/\(word count[^)]*\)/gi, '');
 
   text = text
     .replace(/===\s*PAGE\s+(\d+)\s*===/gi, (_, n) => `\n===PAGE ${n}===\n`)
@@ -338,8 +344,9 @@ async function processWithGemini(job) {
   return raw;
 }
 
-// ── Provider: Groq (Llama 4 Scout) ────────────────────────────────────────
-// Llama 4 Scout is natively multimodal and lists Arabic as a supported language.
+// ── Provider: Groq (Llama 4 Maverick) ────────────────────────────────────
+// Llama 4 Maverick: 17B params, 128 experts — significantly better instruction
+// following than Scout (16 experts). Natively multimodal, supports Arabic.
 // Free tier: 1,000 RPD, 30,000 TPM — no credit card required.
 // Get a key at: console.groq.com
 async function processWithGroq(job) {
@@ -366,7 +373,7 @@ async function processWithGroq(job) {
       "Authorization": `Bearer ${GROQ_API_KEY}`
     },
     body: JSON.stringify({
-      model:      "meta-llama/llama-4-scout-17b-16e-instruct",
+      model:      "meta-llama/llama-4-maverick-17b-128e-instruct",
       messages:   [{ role: "user", content }],
       max_tokens: job.pageNums.length * 500,
       temperature: 0.1
