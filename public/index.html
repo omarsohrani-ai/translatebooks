@@ -629,10 +629,13 @@ select:focus, input:focus {
       <div class="card-title"><span class="ti">📜</span> Upload Manuscript</div>
       <div class="upload-zone" id="dropZone"
            onclick="document.getElementById('fileInput').click()">
-        <input type="file" id="fileInput" accept=".pdf">
+        <input type="file" id="fileInput"
+               accept=".pdf,image/jpeg,image/jpg,image/png,image/webp,image/tiff,image/bmp"
+               multiple>
         <div class="upload-icon">📖</div>
-        <h3>Drop your PDF here</h3>
-        <p>or click to browse your library</p>
+        <h3>Drop PDF or images here</h3>
+        <p>PDF &nbsp;·&nbsp; JPG &nbsp;·&nbsp; PNG &nbsp;·&nbsp; WEBP &nbsp;·&nbsp; TIFF</p>
+        <p style="margin-top:4px;font-size:0.75em">Multiple images = multiple pages</p>
       </div>
       <div id="fileInfo" class="hidden"></div>
     </div>
@@ -942,6 +945,8 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 // ── State ──────────────────────────────────────────────────────
 let pdfDoc = null, totalPages = 0, translations = {};
 let paused = false, stopped = false, pagesDone = 0, startTime = null;
+let imageFiles = [];   // populated when user uploads image files instead of PDF
+let fileMode   = 'pdf'; // 'pdf' | 'images'
 const serverUrl = window.location.origin;
 
 const RTL_LANGS = new Set(['ar', 'he', 'fa', 'ur']);
@@ -1218,40 +1223,105 @@ dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
 dropZone.addEventListener('drop', e => {
   e.preventDefault();
   dropZone.classList.remove('drag');
-  handleFile(e.dataTransfer.files[0]);
+  handleFileList(e.dataTransfer.files);
 });
-document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+document.getElementById('fileInput').addEventListener('change', e => handleFileList(e.target.files));
 
-async function handleFile(file) {
-  if (!file || !file.name.endsWith('.pdf')) { alert('Please select a PDF file.'); return; }
+function handleFileList(fileList) {
+  if (!fileList || fileList.length === 0) return;
+  const files = Array.from(fileList);
+
+  // If a PDF is among the files, use it (PDF takes priority)
+  const pdf = files.find(f => f.name.toLowerCase().endsWith('.pdf'));
+  if (pdf) { handlePDF(pdf); return; }
+
+  // Otherwise treat all files as image pages
+  const imageTypes = ['image/jpeg','image/jpg','image/png','image/webp','image/tiff','image/bmp'];
+  const imgs = files.filter(f => imageTypes.includes(f.type));
+  if (imgs.length > 0) { handleImages(imgs); return; }
+
+  alert('Please upload a PDF file or image files (JPG, PNG, WEBP, TIFF).');
+}
+
+async function handlePDF(file) {
+  fileMode = 'pdf';
+  imageFiles = [];
   const ab = await file.arrayBuffer();
   pdfDoc = await pdfjsLib.getDocument({ data: ab }).promise;
   totalPages = pdfDoc.numPages;
-  document.getElementById('endPage').value = totalPages;
-  document.getElementById('endPage').max = totalPages;
-  document.getElementById('startPage').max = totalPages;
-  document.getElementById('statTotal').textContent = totalPages;
+  setPageRange(totalPages);
+  showFileInfo('📄', file.name, `${totalPages} pages · ${(file.size/1024/1024).toFixed(1)} MB`);
+  log(`✓ Loaded PDF: ${file.name} (${totalPages} pages)`, 'ok');
+  updateEstimate();
+}
+
+async function handleImages(files) {
+  fileMode   = 'images';
+  pdfDoc     = null;
+  imageFiles = files;
+  totalPages = files.length;
+  setPageRange(totalPages);
+
+  const totalMB = (files.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1);
+  const names   = files.length === 1
+    ? files[0].name
+    : `${files[0].name} … +${files.length - 1} more`;
+  showFileInfo('🖼️', names, `${files.length} image${files.length > 1 ? 's' : ''} · ${totalMB} MB`);
+  log(`✓ Loaded ${files.length} image${files.length > 1 ? 's' : ''} as pages`, 'ok');
+  updateEstimate();
+}
+
+function setPageRange(n) {
+  document.getElementById('endPage').value   = n;
+  document.getElementById('endPage').max     = n;
+  document.getElementById('startPage').max   = n;
+  document.getElementById('statTotal').textContent = n;
+}
+
+function showFileInfo(icon, name, meta) {
   const fi = document.getElementById('fileInfo');
   fi.className = 'file-info';
   fi.innerHTML = `
-    <div class="fi-icon">📄</div>
+    <div class="fi-icon">${icon}</div>
     <div>
-      <div class="fi-name">${file.name}</div>
-      <div class="fi-meta">${totalPages} pages &middot; ${(file.size/1024/1024).toFixed(1)} MB</div>
+      <div class="fi-name">${name}</div>
+      <div class="fi-meta">${meta}</div>
     </div>`;
-  log(`✓ Loaded: ${file.name} (${totalPages} pages)`, 'ok');
-  updateEstimate();
 }
 
 // ── Page Rendering ─────────────────────────────────────────────
 async function renderPage(pageNum) {
-  const page = await pdfDoc.getPage(pageNum);
+  if (fileMode === 'images') {
+    // Image mode: convert the image file directly to base64 JPEG
+    return await imageFileToBase64(imageFiles[pageNum - 1]);
+  }
+  // PDF mode: rasterise via PDF.js
+  const page     = await pdfDoc.getPage(pageNum);
   const viewport = page.getViewport({ scale: 1.4 });
-  const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
+  const canvas   = document.createElement('canvas');
+  canvas.width   = viewport.width;
+  canvas.height  = viewport.height;
   await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
   return canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+}
+
+// Convert an image File to base64 JPEG string (strips the data URI prefix)
+function imageFileToBase64(file) {
+  return new Promise((resolve, reject) => {
+    // For non-JPEG images, draw through a canvas to normalise format
+    const img = new Image();
+    const url = URL.createObjectURL(file);
+    img.onload = () => {
+      const canvas   = document.createElement('canvas');
+      canvas.width   = img.naturalWidth;
+      canvas.height  = img.naturalHeight;
+      canvas.getContext('2d').drawImage(img, 0, 0);
+      URL.revokeObjectURL(url);
+      resolve(canvas.toDataURL('image/jpeg', 0.88).split(',')[1]);
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(`Failed to load image: ${file.name}`)); };
+    img.src = url;
+  });
 }
 
 // ── Job Submission & Polling ───────────────────────────────────
@@ -1294,7 +1364,7 @@ async function pollJob(id) {
 
 // ── Translation Runner ─────────────────────────────────────────
 async function startTranslation() {
-  if (!pdfDoc) { alert('Please upload a PDF first.'); return; }
+  if (!pdfDoc && imageFiles.length === 0) { alert('Please upload a PDF or image files first.'); return; }
 
   const batchSize  = parseInt(document.getElementById('batchSize').value);
   const startPage  = parseInt(document.getElementById('startPage').value) || 1;
