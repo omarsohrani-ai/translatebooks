@@ -100,21 +100,37 @@ function extractPages(raw, pageNums) {
   return parsed;
 }
 
-// Remove hallucinated repetitions: if a sentence appears 3+ times consecutively,
-// keep only the first 2 occurrences and truncate the rest.
+// ── Within-page deduplication ─────────────────────────────────────────────
+// Catches two classes of AI hallucination:
+//   1. Consecutive repeated lines (same line printed back-to-back)
+//   2. Non-consecutive repeated lines — AI loops back and re-prints content
+//      that already appeared earlier on the same page
+//      (this is the most common cause of duplicate aphorisms / paragraphs)
 function deduplicateContent(text) {
   const lines = text.split('\n');
   const out   = [];
   let lastLine = '', repeatCount = 0;
 
+  // Tracks substantial lines (30+ chars) already seen anywhere on this page.
+  // Exact-match only — safe for texts with structurally similar but distinct sentences.
+  const seenSubstantial = new Set();
+
   for (const line of lines) {
     const trimmed = line.trim();
+
+    // Preserve blank lines (paragraph breaks) as-is
     if (!trimmed) { out.push(line); lastLine = ''; repeatCount = 0; continue; }
 
+    // For substantial lines: drop if already seen anywhere earlier on this page
+    if (trimmed.length >= 30) {
+      if (seenSubstantial.has(trimmed)) continue; // hallucinated repeat — drop
+      seenSubstantial.add(trimmed);
+    }
+
+    // For short lines: still block consecutive repeats (headers, labels, etc.)
     if (trimmed === lastLine) {
       repeatCount++;
-      if (repeatCount < 2) out.push(line); // allow one repeat at most
-      // silently drop further repetitions
+      if (repeatCount < 2) out.push(line);
     } else {
       out.push(line);
       lastLine    = trimmed;
@@ -122,11 +138,57 @@ function deduplicateContent(text) {
     }
   }
 
-  // Also catch paragraph-level repetition (same sentence repeated in a paragraph)
-  const result = out.join('\n');
-  // Find any sentence repeated 3+ times and keep only 2 occurrences
-  const sentenceRepeat = /(.{30,})\n(\1\n){2,}/g;
-  return result.replace(sentenceRepeat, '$1\n$1\n');
+  return out.join('\n');
+}
+
+// ── Cross-page / cross-batch deduplication ────────────────────────────────
+// When the AI is given pages N and N+1 in separate batches, it sometimes
+// re-translates the last 1–6 lines of page N at the very start of page N+1.
+// This pass compares the tail of each page with the head of the next and
+// strips any matching prefix from the later page.
+function deduplicateAcrossPages(parsed, pageNums) {
+  const sorted = [...pageNums].sort((a, b) => a - b);
+
+  for (let i = 0; i < sorted.length - 1; i++) {
+    const currPn = sorted[i];
+    const nextPn = sorted[i + 1];
+    if (!parsed[currPn] || !parsed[nextPn]) continue;
+    // Skip error/placeholder pages
+    if (parsed[currPn].startsWith('[') || parsed[nextPn].startsWith('[')) continue;
+
+    const currLines    = parsed[currPn].split('\n').map(l => l.trim()).filter(Boolean);
+    const nextLines    = parsed[nextPn].split('\n');          // keep originals for output
+    const nextTrimmed  = nextLines.map(l => l.trim()).filter(Boolean);
+
+    // Try overlaps of 1–6 lines (only match lines that are 20+ chars — ignore short headings)
+    const maxCheck = Math.min(6, currLines.length, nextTrimmed.length);
+    let overlapCount = 0;
+
+    for (let t = maxCheck; t >= 1; t--) {
+      const tail = currLines.slice(-t);
+      const head = nextTrimmed.slice(0, t);
+      const allMatch = tail.every((line, idx) => line === head[idx] && line.length >= 20);
+      if (allMatch) { overlapCount = t; break; }
+    }
+
+    if (overlapCount > 0) {
+      // Remove the overlapping lines from the start of the next page (preserve spacing)
+      const tail = currLines.slice(-overlapCount);
+      let removed = 0;
+      const newNext = [];
+      for (const line of nextLines) {
+        if (removed < overlapCount && line.trim() === tail[removed]) {
+          removed++;
+          continue; // drop this duplicate line
+        }
+        newNext.push(line);
+      }
+      parsed[nextPn] = newNext.join('\n').replace(/^\n+/, '').trim();
+      console.log(`[translate] Cross-page dedup: removed ${overlapCount} line(s) from start of page ${nextPn}`);
+    }
+  }
+
+  return parsed;
 }
 
 // ── Provider: Gemini ───────────────────────────────────────────────────────
@@ -236,7 +298,8 @@ async function processJob(job) {
     } catch (_) { /* keep original failure */ }
   }
 
-  return parsed;
+  // Final pass: remove any cross-batch overlap between consecutive pages
+  return deduplicateAcrossPages(parsed, job.pageNums);
 }
 
 // ── Helper: classify quota errors ─────────────────────────────────────────
