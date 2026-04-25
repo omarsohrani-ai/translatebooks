@@ -150,6 +150,42 @@ async function runQueue() {
     try {
       const raw = await processJob(job);
       const parsed = extractPages(raw, job.pageNums);
+
+      // ── Per-page retry ──────────────────────────────────────────────────
+      // If a page failed extraction (continuous manuscript text causes the
+      // model to merge pages under one delimiter), retry that page ALONE.
+      // A single-page batch cannot be merged with anything — guaranteed fix.
+      const failedPages = job.pageNums.filter(
+        pn => parsed[pn] && parsed[pn].startsWith('[Could not extract')
+      );
+
+      for (const pn of failedPages) {
+        // Find the image for this specific page
+        const idx = job.pageNums.indexOf(pn);
+        if (idx === -1) continue;
+
+        const singleJob = {
+          id: job.id,
+          images: [job.images[idx]],
+          pageNums: [pn],
+          sourceLang: job.sourceLang,
+          targetLang: job.targetLang,
+          timestamp: job.timestamp
+        };
+
+        try {
+          // Small pause before retry to avoid back-to-back requests
+          await new Promise(r => setTimeout(r, 8000));
+          const retryRaw = await processJob(singleJob);
+          const retryParsed = extractPages(retryRaw, [pn]);
+          if (retryParsed[pn] && !retryParsed[pn].startsWith('[Could not extract')) {
+            parsed[pn] = retryParsed[pn];
+          }
+        } catch (retryErr) {
+          // Keep the original failure message if retry also fails
+        }
+      }
+
       jobResults[job.id] = { status: "done", translations: parsed };
     } catch (err) {
       jobResults[job.id] = { status: "error", error: err.message };
