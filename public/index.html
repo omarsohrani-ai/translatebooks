@@ -702,16 +702,16 @@ select:focus, input:focus {
       <!-- Quick-reference grid -->
       <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
         <div class="stat-box">
-          <div class="stat-num">250</div>
+          <div class="stat-num">1,000</div>
           <div class="stat-label">Free requests / day</div>
         </div>
         <div class="stat-box">
-          <div class="stat-num">10</div>
+          <div class="stat-num">15</div>
           <div class="stat-label">Requests / minute</div>
         </div>
         <div class="stat-box">
-          <div class="stat-num">~1.8</div>
-          <div class="stat-label">400-page books / day</div>
+          <div class="stat-num">~3K</div>
+          <div class="stat-label">Free pages / day</div>
         </div>
       </div>
 
@@ -763,17 +763,17 @@ select:focus, input:focus {
           <div>
             <span style="color:var(--gold)">Quota resets at midnight PT</span><br>
             Pacific Time (UTC-7/8). Plan heavy jobs for just after midnight
-            to get a full fresh 250 requests.
+            to get a full fresh 1,000 requests (flash-lite) or 20 (flash).
           </div>
           <div>
-            <span style="color:var(--gold)">One book per sitting</span><br>
-            A 400-page book uses ~134 requests (54% of daily quota).
-            Save the remaining ~116 for a second shorter book the same day.
+            <span style="color:var(--gold)">Two speed modes</span><br>
+            <b style="color:var(--white)">Flash-lite</b> (active): 1,000 RPD — translate a full 400-page book in one session.
+            <b style="color:var(--white)">Flash</b>: only 20 RPD free but richer literary output — enable billing for ~$0.20/book.
           </div>
           <div>
             <span style="color:var(--gold)">Stop &amp; download anytime</span><br>
-            Hit Stop and download a partial PDF. Come back tomorrow and
-            set Start Page to where you left off.
+            Hit Stop and download a partial PDF. Come back and
+            set Start Page to where you left off — no progress is lost.
           </div>
           <div>
             <span style="color:var(--gold)">Enable billing for $0</span><br>
@@ -1104,7 +1104,7 @@ function updateEstimate() {
   const requests = Math.ceil(pages / batch);
   const minSecs  = requests * 20; // ~20s per batch (6s delay + ~14s processing)
   const mins     = Math.round(minSecs / 60);
-  const quota    = Math.round(requests / 250 * 100);
+  const quota    = Math.round(requests / 1000 * 100);
   const quotaCol = quota > 80 ? '#c07070' : quota > 50 ? '#b89040' : '#5daa72';
 
   strip.classList.remove('hidden');
@@ -1128,8 +1128,8 @@ function updateCalc() {
   const totalSec = requests * 20;
   const mins     = Math.floor(totalSec / 60);
   const secs     = totalSec % 60;
-  const quota    = Math.round(requests / 250 * 100);
-  const books250 = Math.floor(250 / requests * 10) / 10;
+  const quota    = Math.round(requests / 1000 * 100);
+  const books250 = Math.floor(1000 / requests * 10) / 10;
   const quotaCol = quota > 80 ? '#c07070' : quota > 50 ? '#b89040' : '#5daa72';
   const timeStr  = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
 
@@ -1139,7 +1139,7 @@ function updateCalc() {
     Estimated time: <b style="color:var(--white)">${timeStr}</b>
     &nbsp;&middot;&nbsp;
     Daily quota used: <b style="color:${quotaCol}">${quota}%</b>
-    (${250 - requests} requests remaining)<br>
+    (${1000 - requests} requests remaining — flash-lite free tier)<br>
     You can translate roughly <b style="color:var(--gold)">${books250} books</b>
     of this size per day on the free tier.
     ${quota > 100
