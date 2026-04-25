@@ -945,6 +945,7 @@ pdfjsLib.GlobalWorkerOptions.workerSrc =
 // ── State ──────────────────────────────────────────────────────
 let pdfDoc = null, totalPages = 0, translations = {};
 let paused = false, stopped = false, pagesDone = 0, startTime = null;
+let lastProvider = 'gemini'; // tracks actual AI provider used — shown in PDF footer
 let imageFiles = [];   // populated when user uploads image files instead of PDF
 let fileMode   = 'pdf'; // 'pdf' | 'images'
 const serverUrl = window.location.origin;
@@ -1370,6 +1371,7 @@ async function startTranslation() {
 
   translations = {};
   pagesDone = 0;
+  lastProvider = 'gemini';
   paused = false;
   stopped = false;
   startTime = Date.now();
@@ -1409,6 +1411,7 @@ async function startTranslation() {
       updatePreview(batch, result);
       // Show which provider handled this batch
       const provider = result._provider || '';
+      if (provider) lastProvider = provider;
       const providerTag = provider === 'groq' ? ' [Groq 🦙]' : ' [Gemini ✦]';
       log(`✓ Pages ${batch.join(', ')} done${providerTag}`, 'ok');
     } catch(err) {
@@ -1664,7 +1667,8 @@ async function downloadPDF() {
   doc.text(`Generated: ${new Date().toLocaleString()}`, W/2, 162, { align: 'center' });
   doc.setFont('times', 'italic');
   doc.setFontSize(7.5);
-  doc.text(`Powered by Google Gemini AI  *  ${siteUrl}`, W/2, H-17, { align: 'center' });
+  const providerLabel = lastProvider === 'groq' ? 'Groq Llama AI' : 'Google Gemini AI';
+  doc.text(`Powered by ${providerLabel}  *  ${siteUrl}`, W/2, H-17, { align: 'center' });
 
   doc.addPage();
 
