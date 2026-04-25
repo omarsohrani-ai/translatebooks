@@ -301,9 +301,8 @@ async function runQueue() {
         }
 
       // ── Gemini daily quota exhausted ──────────────────────────────────
-      if (isGeminiDailyQuota(msg)) {
+      } else if (isGeminiDailyQuota(msg)) {
         if (GROQ_API_KEY && activeProvider === 'gemini') {
-          // Flip to Groq and retry the same job immediately
           activeProvider = 'groq';
           console.log('[translate] Gemini quota exhausted — switching to Groq fallback');
           try {
@@ -312,7 +311,6 @@ async function runQueue() {
           } catch (groqErr) {
             const groqMsg = groqErr.message || '';
             if (isGroqDailyQuota(groqMsg)) {
-              // Both providers exhausted
               jobResults[job.id] = {
                 status: "error",
                 error: "QUOTA_EXHAUSTED_BOTH: Both Gemini and Groq daily limits reached. Gemini resets at midnight PT. Groq resets at midnight UTC."
@@ -324,10 +322,8 @@ async function runQueue() {
             jobResults[job.id] = { status: "error", error: `[Groq fallback failed] ${groqMsg}` };
           }
         } else if (activeProvider === 'groq') {
-          // Already on Groq, Gemini error shouldn't happen — treat as generic
           jobResults[job.id] = { status: "error", error: msg };
         } else {
-          // No Groq key configured
           jobResults[job.id] = {
             status: "error",
             error: "QUOTA_EXHAUSTED: Gemini daily limit (20 RPD) reached. Add a GROQ_API_KEY in Vercel env vars for automatic fallback (free, 1000 RPD). Or wait for midnight PT reset."
