@@ -1153,8 +1153,12 @@ window.addEventListener('load', async () => {
   try {
     const r = await fetch(`${serverUrl}/api/translate?action=queue`);
     if (r.ok) {
+      const d = await r.json();
+      const providerLabel = d.provider === 'groq'
+        ? '🦙 Groq (Llama 4 Scout) — Gemini quota was exhausted'
+        : '✦ Gemini — Translation server online and ready';
       document.getElementById('serverStatus').innerHTML =
-        '<div class="status-ok">✦ &ensp;Translation server is online and ready</div>';
+        `<div class="status-ok">${providerLabel}</div>`;
       loadLanguages();
     }
   } catch(e) {
@@ -1337,24 +1341,33 @@ async function startTranslation() {
       pagesDone += batch.length;
       updateProgress(pagesDone, endPage - startPage + 1);
       updatePreview(batch, result);
-      log(`✓ Pages ${batch.join(', ')} done`, 'ok');
+      // Show which provider handled this batch
+      const provider = result._provider || '';
+      const providerTag = provider === 'groq' ? ' [Groq 🦙]' : ' [Gemini ✦]';
+      log(`✓ Pages ${batch.join(', ')} done${providerTag}`, 'ok');
     } catch(err) {
       const msg = err.message || '';
 
       // ── Daily quota exhausted — stop immediately, no point retrying ──
       if (err._quotaExhausted ||
           msg.includes('GenerateRequestsPerDayPerProjectPerModel') ||
-          (msg.includes('429') && msg.includes('limit: 20'))) {
+          (msg.includes('429') && msg.includes('limit: 20')) ||
+          msg.includes('QUOTA_EXHAUSTED')) {
 
-        // Extract suggested retry delay from error if present
+        const both = msg.includes('QUOTA_EXHAUSTED_BOTH');
         const retryMatch = msg.match(/Please retry in ([\d.]+)s/);
         const resetMsg = retryMatch
-          ? `Quota resets in ~${Math.ceil(retryMatch[1] / 60)} minutes (midnight Pacific Time).`
+          ? `Quota resets in ~${Math.ceil(retryMatch[1] / 60)} minutes.`
+          : both
+          ? 'Gemini resets midnight PT · Groq resets midnight UTC.'
           : 'Quota resets at midnight Pacific Time (UTC-7).';
 
-        log(`✗ Daily quota exhausted on pages ${batch.join(',')}`, 'err');
+        log(`✗ ${both ? 'Both Gemini & Groq' : 'Daily'} quota exhausted on pages ${batch.join(',')}`, 'err');
         log(`⏰ ${resetMsg}`, 'warn');
-        log('💡 Options: (1) Wait for midnight PT reset  (2) Create a new Google Cloud project with a fresh API key  (3) Enable billing at aistudio.google.com (~$0.30 for a 400-page book)', 'warn');
+        if (!both) {
+          log('💡 Add GROQ_API_KEY in Vercel env vars for automatic fallback (free, 1000 RPD)', 'warn');
+        }
+        log('💡 Or enable Gemini billing at aistudio.google.com (~$0.30 for a 400-page book)', 'warn');
 
         if (Object.keys(translations).length > 0) {
           log('⬇ Partial results available — downloading what was completed…', 'info');
