@@ -98,8 +98,16 @@ function extractPages(raw, pageNums) {
 // ── Provider: Gemini ───────────────────────────────────────────────────────
 async function processWithGemini(job) {
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  // gemini-2.5-flash-lite: 20 RPD free, best OCR on difficult scripts
-  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" });
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash-lite",
+    generationConfig: {
+      // Cap output per batch to prevent hallucination loops on repetitive text.
+      // Dense Arabic manuscript: ~400 words/page × ~1.5 tokens/word × pages + overhead.
+      // 512 tokens per page is generous; 2048 covers a batch of 3 comfortably.
+      maxOutputTokens: Math.max(2048, job.pageNums.length * 600),
+      temperature: 0.1  // low temperature = less creative, less looping
+    }
+  });
 
   const targetLang = LANGUAGES[job.targetLang] || "English";
   const sourceLang = job.sourceLang === "auto"
@@ -147,8 +155,8 @@ async function processWithGroq(job) {
     body: JSON.stringify({
       model:      "meta-llama/llama-4-scout-17b-16e-instruct",
       messages:   [{ role: "user", content }],
-      max_tokens: 8192,
-      temperature: 0.2
+      max_tokens: Math.max(2048, job.pageNums.length * 600),
+      temperature: 0.1
     })
   });
 
@@ -353,8 +361,10 @@ module.exports = async (req, res) => {
     if (!GEMINI_API_KEY && !GROQ_API_KEY)
       return res.status(500).json({ error: "No API keys configured. Set GEMINI_API_KEY or GROQ_API_KEY in Vercel environment variables." });
 
-    // If only Groq key is set, start directly on Groq
-    if (!GEMINI_API_KEY && GROQ_API_KEY) activeProvider = 'groq';
+    // Reset to Gemini at the start of each new translation session
+    // (prevents stale fallback state from a previous quota-exhausted session)
+    if (GEMINI_API_KEY) activeProvider = 'gemini';
+    else if (GROQ_API_KEY) activeProvider = 'groq';
 
     const { images, pageNums, sourceLang, targetLang } = req.body;
     if (!images || !pageNums || images.length !== pageNums.length)
