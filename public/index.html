@@ -1102,7 +1102,7 @@ function updateEstimate() {
 
   const pages    = end - start + 1;
   const requests = Math.ceil(pages / batch);
-  const minSecs  = requests * 20; // ~20s per batch (6s delay + ~14s processing)
+  const minSecs  = requests * 70; // ~70s per batch (55s delay + ~15s processing)
   const mins     = Math.round(minSecs / 60);
   const quota    = Math.round(requests / 1000 * 100);
   const quotaCol = quota > 80 ? '#c07070' : quota > 50 ? '#b89040' : '#5daa72';
@@ -1125,7 +1125,7 @@ function updateCalc() {
   const pages   = parseInt(document.getElementById('calcPages').value)  || 100;
   const batch   = parseInt(document.getElementById('calcBatch').value)  || 3;
   const requests = Math.ceil(pages / batch);
-  const totalSec = requests * 20;
+  const totalSec = requests * 70;
   const mins     = Math.floor(totalSec / 60);
   const secs     = totalSec % 60;
   const quota    = Math.round(requests / 1000 * 100);
