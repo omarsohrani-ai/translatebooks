@@ -1,1076 +1,619 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-<meta charset="UTF-8" />
-<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>DocuTranslate — AI PDF Translator</title>
-<link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
-<link href="https://fonts.googleapis.com/css2?family=Cinzel+Decorative:wght@400;700&family=Playfair+Display:ital,wght@0,400;0,600;0,700;1,400;1,600&family=EB+Garamond:ital,wght@0,400;0,500;0,600;1,400&display=swap" rel="stylesheet"/>
-
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <style>
-/* ═══════════════════════════════════════════
-   ROOT & TOKENS
-═══════════════════════════════════════════ */
-:root {
-  --bg-deep:       #080504;
-  --bg-base:       #100a06;
-  --bg-card:       #16100a;
-  --bg-card-hover: #1c140d;
-  --bg-inset:      #0d0806;
-
-  --gold-dim:      #7a5a1a;
-  --gold-mid:      #b8860b;
-  --gold:          #d4a017;
-  --gold-bright:   #f0c040;
-  --gold-glow:     rgba(212,160,23,.18);
-
-  --parchment:     #f2e5c8;
-  --parchment-dim: #c8aa7a;
-  --parchment-fade:#8a7055;
-  --parchment-ghost:#4a3820;
-
-  --ruby:          #7a1a1a;
-  --ruby-bright:   #c0392b;
-  --emerald:       #1a4a2e;
-  --emerald-bright:#27ae60;
-
-  --border:        rgba(180,130,20,.22);
-  --border-bright: rgba(212,160,23,.50);
-  --shadow-gold:   0 0 28px rgba(212,160,23,.12);
-
-  --radius-sm: 4px;
-  --radius:    8px;
-  --radius-lg: 14px;
-}
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-html { scroll-behavior: smooth; }
-
-body {
-  background-color: var(--bg-deep);
-  color: var(--parchment);
-  font-family: 'EB Garamond', Georgia, serif;
-  font-size: 17px;
-  line-height: 1.7;
-  min-height: 100vh;
-  overflow-x: hidden;
-  cursor: default;
-}
-
-/* ── Parchment grain overlay ── */
-body::before {
-  content: '';
-  position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background-image:
-    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='300' height='300'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3CfeColorMatrix type='saturate' values='0'/%3E%3C/filter%3E%3Crect width='300' height='300' filter='url(%23n)' opacity='0.045'/%3E%3C/svg%3E");
-  opacity: .6;
-}
-
-/* ── Radial warm-light vignette ── */
-body::after {
-  content: '';
-  position: fixed; inset: 0; z-index: 0; pointer-events: none;
-  background: radial-gradient(ellipse 80% 60% at 50% 0%, rgba(180,120,10,.08) 0%, transparent 70%),
-              radial-gradient(ellipse 60% 40% at 50% 100%, rgba(80,40,10,.25) 0%, transparent 65%);
-}
-
-/* ═══════════════════════════════════════════
-   SCROLLBAR
-═══════════════════════════════════════════ */
-::-webkit-scrollbar { width: 6px; }
-::-webkit-scrollbar-track { background: var(--bg-deep); }
-::-webkit-scrollbar-thumb { background: var(--gold-dim); border-radius: 3px; }
-::-webkit-scrollbar-thumb:hover { background: var(--gold); }
-
-/* ═══════════════════════════════════════════
-   LAYOUT
-═══════════════════════════════════════════ */
-.page-wrapper {
-  position: relative; z-index: 1;
-  max-width: 1160px;
-  margin: 0 auto;
-  padding: 0 24px 80px;
-}
-
-/* ═══════════════════════════════════════════
-   HEADER
-═══════════════════════════════════════════ */
-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 30px 0 24px;
-  border-bottom: 1px solid var(--border);
-  position: relative;
-}
-
-header::after {
-  content: '';
-  position: absolute; bottom: -4px; left: 0; right: 0; height: 1px;
-  background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
-}
-
-.brand {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-}
-
-.brand-icon {
-  width: 48px; height: 48px;
-  border: 1.5px solid var(--gold-dim);
-  border-radius: var(--radius-sm);
-  display: flex; align-items: center; justify-content: center;
-  background: linear-gradient(135deg, var(--bg-card), rgba(180,130,10,.1));
-  box-shadow: inset 0 0 12px rgba(212,160,23,.08), var(--shadow-gold);
-  font-size: 22px;
-  transition: box-shadow .3s;
-}
-.brand-icon:hover { box-shadow: inset 0 0 16px rgba(212,160,23,.15), 0 0 32px rgba(212,160,23,.2); }
-
-.brand-text h1 {
-  font-family: 'Cinzel Decorative', serif;
-  font-size: 1.45rem;
-  font-weight: 700;
-  letter-spacing: .08em;
-  line-height: 1.2;
-  background: linear-gradient(135deg, var(--gold-bright) 0%, var(--gold) 40%, var(--parchment-dim) 100%);
-  -webkit-background-clip: text;
-  -webkit-text-fill-color: transparent;
-  background-clip: text;
-}
-
-.brand-text p {
-  font-family: 'EB Garamond', serif;
-  font-style: italic;
-  font-size: .88rem;
-  color: var(--parchment-fade);
-  letter-spacing: .04em;
-  margin-top: 1px;
-}
-
-.badge-free {
-  font-family: 'EB Garamond', serif;
-  font-size: .72rem;
-  font-weight: 600;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--gold-bright);
-  border: 1px solid var(--gold-mid);
-  padding: 3px 9px;
-  border-radius: 2px;
-  background: rgba(212,160,23,.07);
-  align-self: flex-start;
-  margin-top: 4px;
-}
-
-/* ═══════════════════════════════════════════
-   STATUS BAR
-═══════════════════════════════════════════ */
-.status-bar {
-  margin: 22px 0;
-  padding: 11px 18px;
-  border: 1px solid rgba(39,174,96,.25);
-  border-left: 3px solid var(--emerald-bright);
-  border-radius: var(--radius-sm);
-  background: rgba(26,74,46,.18);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  font-size: .88rem;
-  color: #6fcf97;
-  letter-spacing: .03em;
-  position: relative;
-  overflow: hidden;
-}
-
-.status-bar::before {
-  content: '';
-  position: absolute; left: 0; top: 0; bottom: 0; width: 3px;
-  background: linear-gradient(to bottom, transparent, var(--emerald-bright), transparent);
-  animation: statusPulse 2.5s ease-in-out infinite;
-}
-@keyframes statusPulse {
-  0%,100% { opacity: .4; }
-  50% { opacity: 1; }
-}
-
-.status-dot {
-  width: 8px; height: 8px; border-radius: 50%;
-  background: var(--emerald-bright);
-  box-shadow: 0 0 8px rgba(39,174,96,.6);
-  animation: dotPulse 2s ease-in-out infinite;
-  flex-shrink: 0;
-}
-@keyframes dotPulse {
-  0%,100% { box-shadow: 0 0 5px rgba(39,174,96,.5); }
-  50% { box-shadow: 0 0 14px rgba(39,174,96,.9); }
-}
-
-/* ═══════════════════════════════════════════
-   ORNAMENT / DIVIDER
-═══════════════════════════════════════════ */
-.ornament {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin: 32px 0 20px;
-  opacity: .55;
-}
-.ornament::before, .ornament::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--gold-dim));
-}
-.ornament::after { background: linear-gradient(90deg, var(--gold-dim), transparent); }
-.ornament-glyph {
-  color: var(--gold-mid);
-  font-size: 1.1rem;
-  flex-shrink: 0;
-}
-
-/* ═══════════════════════════════════════════
-   GRID
-═══════════════════════════════════════════ */
-.main-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 20px;
-}
-
-@media (max-width: 720px) {
-  .main-grid { grid-template-columns: 1fr; }
-}
-
-/* ═══════════════════════════════════════════
-   PANEL / CARD
-═══════════════════════════════════════════ */
-.panel {
-  background: var(--bg-card);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-lg);
-  padding: 26px 28px;
-  position: relative;
-  transition: border-color .3s, box-shadow .3s;
-}
-.panel:hover {
-  border-color: rgba(180,130,20,.38);
-  box-shadow: var(--shadow-gold);
-}
-
-/* corner ornaments */
-.panel::before, .panel::after {
-  content: '';
-  position: absolute;
-  width: 14px; height: 14px;
-  border-color: var(--gold-dim);
-  border-style: solid;
-  opacity: .5;
-}
-.panel::before { top: -1px; left: -1px; border-width: 2px 0 0 2px; border-radius: var(--radius-sm) 0 0 0; }
-.panel::after  { bottom: -1px; right: -1px; border-width: 0 2px 2px 0; border-radius: 0 0 var(--radius-sm) 0; }
-
-.panel-title {
-  font-family: 'Playfair Display', serif;
-  font-size: 1.05rem;
-  font-weight: 600;
-  letter-spacing: .04em;
-  color: var(--gold);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  margin-bottom: 22px;
-  padding-bottom: 14px;
-  border-bottom: 1px solid var(--border);
-  position: relative;
-}
-.panel-title::after {
-  content: '';
-  position: absolute; bottom: -1px; left: 0; width: 60px; height: 1px;
-  background: var(--gold-mid);
-}
-.panel-title .title-icon {
-  font-size: 1rem;
-  opacity: .85;
-}
-
-/* ═══════════════════════════════════════════
-   UPLOAD ZONE
-═══════════════════════════════════════════ */
-.upload-zone {
-  border: 1.5px dashed var(--gold-dim);
-  border-radius: var(--radius);
-  padding: 40px 20px;
-  text-align: center;
-  cursor: pointer;
-  transition: all .3s;
-  background: var(--bg-inset);
-  position: relative;
-  overflow: hidden;
-}
-.upload-zone::before {
-  content: '';
-  position: absolute; inset: 0;
-  background: radial-gradient(ellipse at 50% 50%, rgba(212,160,23,.04) 0%, transparent 70%);
-  pointer-events: none;
-}
-.upload-zone:hover, .upload-zone.dragover {
-  border-color: var(--gold);
-  background: rgba(212,160,23,.05);
-  box-shadow: inset 0 0 30px rgba(212,160,23,.06), 0 0 20px rgba(212,160,23,.1);
-}
-
-.upload-icon {
-  font-size: 2.6rem;
-  margin-bottom: 12px;
-  display: block;
-  filter: drop-shadow(0 0 8px rgba(212,160,23,.3));
-  animation: float 3.5s ease-in-out infinite;
-}
-@keyframes float {
-  0%,100% { transform: translateY(0); }
-  50% { transform: translateY(-5px); }
-}
-
-.upload-zone h3 {
-  font-family: 'Playfair Display', serif;
-  font-size: 1rem;
-  font-weight: 600;
-  color: var(--parchment);
-  margin-bottom: 4px;
-}
-.upload-zone p {
-  font-size: .84rem;
-  font-style: italic;
-  color: var(--parchment-fade);
-}
-
-#file-input { display: none; }
-
-.file-info {
-  display: none;
-  margin-top: 14px;
-  padding: 10px 14px;
-  background: rgba(212,160,23,.06);
-  border: 1px solid var(--gold-dim);
-  border-radius: var(--radius-sm);
-  font-size: .84rem;
-  color: var(--parchment-dim);
-  text-align: left;
-}
-.file-info.visible { display: block; }
-
-/* ═══════════════════════════════════════════
-   FORM ELEMENTS
-═══════════════════════════════════════════ */
-.field-group {
-  margin-bottom: 18px;
-}
-.field-group:last-child { margin-bottom: 0; }
-
-label {
-  display: block;
-  font-size: .78rem;
-  font-weight: 600;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--parchment-fade);
-  margin-bottom: 7px;
-}
-
-select, input[type="text"], input[type="number"] {
-  width: 100%;
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  color: var(--parchment);
-  font-family: 'EB Garamond', serif;
-  font-size: .95rem;
-  padding: 9px 12px;
-  outline: none;
-  transition: border-color .25s, box-shadow .25s;
-  appearance: none;
-  -webkit-appearance: none;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%23b8860b'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  cursor: pointer;
-}
-
-input[type="text"], input[type="number"] {
-  background-image: none;
-}
-
-select:hover, input:hover {
-  border-color: var(--gold-dim);
-}
-select:focus, input:focus {
-  border-color: var(--gold);
-  box-shadow: 0 0 0 3px rgba(212,160,23,.12);
-}
-
-select option { background: #1a1008; color: var(--parchment); }
-
-.fields-row {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 14px;
-}
-
-/* ═══════════════════════════════════════════
-   CONTROLS PANEL
-═══════════════════════════════════════════ */
-.controls-panel {
-  grid-column: 1 / -1;
-}
-
-.btn-group {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-}
-
-.btn {
-  font-family: 'EB Garamond', serif;
-  font-size: .95rem;
-  letter-spacing: .06em;
-  padding: 10px 22px;
-  border-radius: var(--radius-sm);
-  border: 1px solid transparent;
-  cursor: pointer;
-  transition: all .25s;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 500;
-  position: relative;
-  overflow: hidden;
-}
-
-.btn::before {
-  content: '';
-  position: absolute; inset: 0;
-  background: linear-gradient(135deg, rgba(255,255,255,.06), transparent);
-  pointer-events: none;
-}
-
-.btn-primary {
-  background: linear-gradient(135deg, #8b6a10, #c9900a, #a07010);
-  border-color: var(--gold-mid);
-  color: var(--bg-deep);
-  font-weight: 700;
-  box-shadow: 0 2px 14px rgba(180,120,10,.35), inset 0 1px 0 rgba(255,220,80,.2);
-  text-shadow: 0 1px 2px rgba(0,0,0,.3);
-}
-.btn-primary:hover {
-  background: linear-gradient(135deg, #a07a14, #e0a010, #b08014);
-  box-shadow: 0 4px 24px rgba(212,160,23,.45), inset 0 1px 0 rgba(255,230,100,.3);
-  transform: translateY(-1px);
-}
-.btn-primary:active { transform: translateY(0); }
-
-.btn-secondary {
-  background: var(--bg-inset);
-  border-color: var(--border);
-  color: var(--parchment-dim);
-}
-.btn-secondary:hover {
-  border-color: var(--gold-dim);
-  color: var(--parchment);
-  background: rgba(212,160,23,.05);
-}
-
-.btn-danger {
-  background: var(--bg-inset);
-  border-color: rgba(122,26,26,.5);
-  color: #e07070;
-}
-.btn-danger:hover {
-  border-color: var(--ruby-bright);
-  background: rgba(122,26,26,.15);
-}
-
-.btn-success {
-  background: var(--bg-inset);
-  border-color: rgba(39,174,96,.3);
-  color: #6fcf97;
-}
-.btn-success:hover {
-  border-color: var(--emerald-bright);
-  background: rgba(39,174,96,.1);
-}
-
-.btn:disabled {
-  opacity: .35;
-  cursor: not-allowed;
-  transform: none !important;
-  box-shadow: none !important;
-}
-
-/* ═══════════════════════════════════════════
-   PROGRESS PANEL
-═══════════════════════════════════════════ */
-.progress-panel {
-  grid-column: 1 / -1;
-}
-
-.progress-stats {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 14px;
-  margin-bottom: 22px;
-}
-
-@media (max-width: 600px) {
-  .progress-stats { grid-template-columns: repeat(2, 1fr); }
-}
-
-.stat-box {
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 14px 16px;
-  text-align: center;
-  position: relative;
-  overflow: hidden;
-  transition: border-color .3s;
-}
-.stat-box:hover { border-color: var(--gold-dim); }
-.stat-box::after {
-  content: '';
-  position: absolute; bottom: 0; left: 0; right: 0; height: 2px;
-  background: linear-gradient(90deg, transparent, var(--gold-dim), transparent);
-  opacity: .5;
-}
-
-.stat-value {
-  font-family: 'Playfair Display', serif;
-  font-size: 1.8rem;
-  font-weight: 700;
-  color: var(--gold-bright);
-  line-height: 1;
-  margin-bottom: 4px;
-  display: block;
-}
-.stat-label {
-  font-size: .75rem;
-  letter-spacing: .08em;
-  text-transform: uppercase;
-  color: var(--parchment-fade);
-}
-
-.queue-status {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 10px 16px;
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  font-size: .88rem;
-  color: var(--parchment-dim);
-  margin-bottom: 18px;
-  font-style: italic;
-}
-
-/* Progress Bar */
-.progress-bar-wrap {
-  margin-bottom: 8px;
-}
-.progress-bar-label {
-  display: flex;
-  justify-content: space-between;
-  font-size: .8rem;
-  color: var(--parchment-fade);
-  margin-bottom: 6px;
-  letter-spacing: .04em;
-}
-.progress-bar-track {
-  height: 6px;
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  border-radius: 3px;
-  overflow: hidden;
-}
-.progress-bar-fill {
-  height: 100%;
-  width: 0%;
-  background: linear-gradient(90deg, var(--gold-dim), var(--gold), var(--gold-bright));
-  border-radius: 3px;
-  transition: width .6s cubic-bezier(.4,0,.2,1);
-  box-shadow: 0 0 8px rgba(212,160,23,.4);
-  position: relative;
-}
-.progress-bar-fill::after {
-  content: '';
-  position: absolute; right: 0; top: 0; bottom: 0; width: 20px;
-  background: linear-gradient(90deg, transparent, rgba(255,230,100,.5));
-  animation: shimmer 1.8s ease-in-out infinite;
-}
-@keyframes shimmer { 0%,100% { opacity: 0; } 50% { opacity: 1; } }
-
-.progress-text {
-  font-size: .84rem;
-  font-style: italic;
-  color: var(--parchment-fade);
-  text-align: center;
-  margin-top: 10px;
-}
-
-/* ═══════════════════════════════════════════
-   PREVIEW PANEL
-═══════════════════════════════════════════ */
-.preview-panel {
-  grid-column: 1 / -1;
-}
-
-.preview-area {
-  min-height: 200px;
-  background: var(--bg-inset);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  padding: 22px 24px;
-  font-family: 'EB Garamond', serif;
-  font-size: 1rem;
-  line-height: 1.85;
-  color: var(--parchment-dim);
-  position: relative;
-  overflow-y: auto;
-  max-height: 460px;
-}
-
-.preview-area::before {
-  content: '❧';
-  position: absolute; top: 14px; right: 18px;
-  font-size: 1.4rem;
-  color: var(--gold-dim);
-  opacity: .4;
-}
-
-.preview-empty {
-  font-style: italic;
-  color: var(--parchment-ghost);
-  text-align: center;
-  padding: 40px 0;
-  font-size: 1.02rem;
-}
-
-.preview-batch {
-  margin-bottom: 24px;
-  padding-bottom: 20px;
-  border-bottom: 1px solid var(--border);
-}
-.preview-batch:last-child { border-bottom: none; margin-bottom: 0; }
-.preview-batch-header {
-  font-family: 'Playfair Display', serif;
-  font-size: .82rem;
-  letter-spacing: .1em;
-  text-transform: uppercase;
-  color: var(--gold-dim);
-  margin-bottom: 10px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.preview-batch-header::before, .preview-batch-header::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: var(--border);
-}
-
-/* ═══════════════════════════════════════════
-   FOOTER
-═══════════════════════════════════════════ */
-footer {
-  text-align: center;
-  padding: 32px 0 16px;
-  font-size: .82rem;
-  color: var(--parchment-ghost);
-  font-style: italic;
-  border-top: 1px solid var(--border);
-  letter-spacing: .04em;
-}
-footer a { color: var(--gold-dim); text-decoration: none; transition: color .2s; }
-footer a:hover { color: var(--gold); }
-
-/* ═══════════════════════════════════════════
-   PAGE LOAD ANIMATION
-═══════════════════════════════════════════ */
-@keyframes fadeUp {
-  from { opacity: 0; transform: translateY(16px); }
-  to   { opacity: 1; transform: translateY(0); }
-}
-
-.panel, .status-bar {
-  animation: fadeUp .6s ease both;
-}
-.status-bar          { animation-delay: .1s; }
-.panel:nth-child(1)  { animation-delay: .2s; }
-.panel:nth-child(2)  { animation-delay: .3s; }
-.panel:nth-child(3)  { animation-delay: .4s; }
-.panel:nth-child(4)  { animation-delay: .5s; }
-.panel:nth-child(5)  { animation-delay: .6s; }
-
-/* ═══════════════════════════════════════════
-   UTILITY
-═══════════════════════════════════════════ */
-.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0,0,0,0); }
-
-/* Notification toast */
-.toast {
-  position: fixed; bottom: 28px; right: 28px; z-index: 9999;
-  background: var(--bg-card);
-  border: 1px solid var(--gold-mid);
-  border-radius: var(--radius-sm);
-  padding: 12px 20px;
-  font-size: .9rem;
-  color: var(--parchment-dim);
-  box-shadow: 0 8px 30px rgba(0,0,0,.5), 0 0 20px rgba(212,160,23,.15);
-  animation: toastIn .3s ease;
-  max-width: 320px;
-}
-.toast.success { border-color: rgba(39,174,96,.5); color: #6fcf97; }
-.toast.error   { border-color: rgba(192,57,43,.5); color: #e07070; }
-@keyframes toastIn {
-  from { opacity: 0; transform: translateX(20px); }
-  to   { opacity: 1; transform: translateX(0); }
-}
+  :root {
+    --bg: #0d1117;
+    --card: #161b22;
+    --card2: #1c2128;
+    --border: #30363d;
+    --accent: #238636;
+    --accent2: #1f6feb;
+    --gold: #e3b341;
+    --red: #da3633;
+    --text: #c9d1d9;
+    --muted: #8b949e;
+    --white: #f0f6fc;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+
+  /* HEADER */
+  .header { background: linear-gradient(135deg, #0d1117, #161b22); border-bottom: 1px solid var(--border); padding: 20px 40px; display: flex; align-items: center; gap: 20px; }
+  .logo { font-size: 2em; }
+  .header-text h1 { font-size: 1.5em; color: var(--white); font-weight: 700; }
+  .header-text p { color: var(--muted); font-size: 0.85em; margin-top: 3px; }
+  .badge { background: var(--accent); color: white; font-size: 0.7em; padding: 2px 8px; border-radius: 20px; margin-left: 10px; vertical-align: middle; }
+
+  /* LAYOUT */
+  .main { max-width: 960px; margin: 0 auto; padding: 30px 20px; }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+  @media(max-width:640px) { .grid2 { grid-template-columns: 1fr; } .header { padding: 15px 20px; } }
+
+  /* CARDS */
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
+  .card h2 { font-size: 1em; color: var(--white); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
+  .card h2 .icon { font-size: 1.2em; }
+
+  /* UPLOAD */
+  .upload-zone { border: 2px dashed var(--border); border-radius: 10px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent2); background: rgba(31,111,235,0.05); }
+  .upload-zone .big-icon { font-size: 2.5em; margin-bottom: 12px; }
+  .upload-zone h3 { color: var(--white); margin-bottom: 6px; }
+  .upload-zone p { color: var(--muted); font-size: 0.85em; }
+  .upload-zone input { display: none; }
+  .file-info { background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; margin-top: 12px; }
+  .file-info .fi-icon { font-size: 1.5em; }
+  .file-info .fi-name { color: var(--white); font-weight: 600; font-size: 0.9em; }
+  .file-info .fi-meta { color: var(--muted); font-size: 0.8em; }
+
+  /* FORM ELEMENTS */
+  select, input[type=number], input[type=text] {
+    background: var(--card2); color: var(--text); border: 1px solid var(--border);
+    padding: 9px 12px; border-radius: 6px; font-size: 0.9em; width: 100%;
+    transition: border-color 0.2s;
+  }
+  select:focus, input:focus { outline: none; border-color: var(--accent2); }
+  label { display: block; color: var(--muted); font-size: 0.82em; margin-bottom: 6px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
+  .form-group { margin-bottom: 16px; }
+  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+  /* BUTTONS */
+  .btn { border: none; padding: 11px 24px; border-radius: 6px; font-size: 0.9em; cursor: pointer; font-weight: 600; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
+  .btn-primary { background: var(--accent); color: white; }
+  .btn-primary:hover { background: #2ea043; }
+  .btn-primary:disabled { background: #1a3a1a; color: var(--muted); cursor: not-allowed; }
+  .btn-blue { background: var(--accent2); color: white; }
+  .btn-blue:hover { background: #388bfd; }
+  .btn-orange { background: #d29922; color: white; }
+  .btn-orange:hover { background: #e3b341; }
+  .btn-red { background: var(--red); color: white; }
+  .btn-red:hover { background: #f85149; }
+  .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
+  .btn-ghost:hover { background: var(--card2); }
+  .btn-lg { padding: 13px 30px; font-size: 1em; }
+  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
+
+  /* PROGRESS */
+  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
+  @media(max-width:640px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
+  .stat-box { background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center; }
+  .stat-num { font-size: 1.6em; font-weight: 700; color: var(--gold); }
+  .stat-label { font-size: 0.75em; color: var(--muted); margin-top: 3px; }
+  .progress-wrap { background: var(--card2); border-radius: 20px; height: 10px; overflow: hidden; margin: 12px 0 6px; }
+  .progress-fill { height: 100%; border-radius: 20px; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width 0.4s ease; }
+  .progress-label { font-size: 0.82em; color: var(--muted); }
+
+  /* LOG */
+  .log-box { background: #010409; border: 1px solid var(--border); border-radius: 8px; padding: 12px; max-height: 200px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.78em; }
+  .log-line { padding: 2px 0; }
+  .log-line.ok { color: #3fb950; }
+  .log-line.err { color: #f85149; }
+  .log-line.info { color: #58a6ff; }
+  .log-line.warn { color: var(--gold); }
+  .log-line.dim { color: var(--muted); }
+
+  /* QUEUE INDICATOR */
+  .queue-banner { background: linear-gradient(90deg, #1c2128, #1f2937); border: 1px solid var(--gold); border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
+  .queue-banner .q-icon { font-size: 1.4em; }
+  .queue-banner .q-text { flex: 1; }
+  .queue-banner .q-title { color: var(--gold); font-weight: 600; font-size: 0.9em; }
+  .queue-banner .q-sub { color: var(--muted); font-size: 0.8em; margin-top: 2px; }
+  .pulse { animation: pulse 2s infinite; }
+  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
+
+  /* PREVIEW */
+  .preview-box { background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; max-height: 280px; overflow-y: auto; line-height: 1.75; font-size: 0.88em; color: var(--text); }
+  .preview-page-title { color: var(--gold); font-weight: 700; font-size: 0.85em; text-transform: uppercase; letter-spacing: 1px; margin: 12px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
+
+  /* SERVER CONFIG */
+  .server-cfg { background: rgba(31,111,235,0.08); border: 1px solid rgba(31,111,235,0.3); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
+  .server-cfg p { font-size: 0.85em; color: var(--muted); margin-bottom: 10px; }
+  .server-url-row { display: flex; gap: 8px; }
+  .server-url-row input { flex: 1; }
+
+  /* ALERT */
+  .alert { border-radius: 8px; padding: 12px 16px; font-size: 0.85em; margin-bottom: 16px; display: flex; gap: 10px; align-items: flex-start; }
+  .alert-info { background: rgba(31,111,235,0.1); border: 1px solid rgba(31,111,235,0.3); color: #79c0ff; }
+  .alert-success { background: rgba(35,134,54,0.1); border: 1px solid rgba(35,134,54,0.3); color: #3fb950; }
+  .alert-warn { background: rgba(210,153,34,0.1); border: 1px solid rgba(210,153,34,0.3); color: var(--gold); }
+
+  /* STEP BADGES */
+  .step { display: flex; gap: 14px; margin-bottom: 16px; align-items: flex-start; }
+  .step-num { background: var(--accent2); color: white; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8em; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
+  .step-body h4 { color: var(--white); font-size: 0.9em; margin-bottom: 3px; }
+  .step-body p { color: var(--muted); font-size: 0.82em; line-height: 1.5; }
+  .step-body code { background: var(--card2); padding: 1px 6px; border-radius: 4px; font-family: monospace; color: var(--gold); font-size: 0.9em; }
+
+  /* HIDDEN */
+  .hidden { display: none !important; }
+  .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
 </style>
 </head>
 <body>
 
-<div class="page-wrapper">
-
-  <!-- ═══════════ HEADER ═══════════ -->
-  <header>
-    <div class="brand">
-      <div class="brand-icon">📖</div>
-      <div class="brand-text">
-        <h1>DocuTranslate</h1>
-        <p>AI-powered PDF translator · 40+ languages · Powered by Google Gemini</p>
-      </div>
-    </div>
-    <span class="badge-free">Gratis</span>
-  </header>
-
-  <!-- ═══════════ STATUS BAR ═══════════ -->
-  <div class="status-bar" id="status-bar">
-    <div class="status-dot" id="status-dot"></div>
-    <span id="status-text">AI Translation Server — Online &amp; Ready</span>
+<div class="header">
+  <div class="logo">📄</div>
+  <div class="header-text">
+    <h1>DocuTranslate <span class="badge">FREE</span></h1>
+    <p>AI-powered PDF translator — 40+ languages — Powered by Google Gemini</p>
   </div>
+</div>
 
-  <!-- ═══════════ MAIN GRID ═══════════ -->
-  <div class="main-grid">
+<div class="main">
 
-    <!-- UPLOAD PANEL -->
-    <div class="panel">
-      <div class="panel-title">
-        <span class="title-icon">📂</span>
-        Upload Manuscript
-      </div>
+  <!-- SERVER STATUS (small, unobtrusive) -->
+  <div id="serverStatus" style="margin-bottom:12px;"></div>
 
-      <div class="upload-zone" id="drop-zone" role="button" tabindex="0"
-           aria-label="Upload PDF file by clicking or dragging">
-        <span class="upload-icon">📄</span>
+  <!-- UPLOAD + SETTINGS -->
+  <div class="grid2">
+    <div class="card">
+      <h2><span class="icon">📂</span> Upload PDF</h2>
+      <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
+        <input type="file" id="fileInput" accept=".pdf">
+        <div class="big-icon">📄</div>
         <h3>Drop PDF here</h3>
-        <p>or click to browse your files</p>
-        <input type="file" id="file-input" accept=".pdf" aria-label="Select PDF file"/>
+        <p>or click to browse</p>
       </div>
-
-      <div class="file-info" id="file-info">
-        <strong id="file-name">No file selected</strong>
-        <span style="float:right; color: var(--gold-dim);" id="file-size">—</span>
-      </div>
+      <div id="fileInfo" class="hidden"></div>
     </div>
 
-    <!-- TRANSLATION SETTINGS PANEL -->
-    <div class="panel">
-      <div class="panel-title">
-        <span class="title-icon">🌐</span>
-        Translation Settings
-      </div>
-
-      <div class="field-group">
-        <label for="source-lang">Source Language</label>
-        <select id="source-lang">
+    <div class="card">
+      <h2><span class="icon">🌍</span> Translation Settings</h2>
+      <div class="form-group">
+        <label>Source Language</label>
+        <select id="sourceLang">
           <option value="auto">🔍 Auto-detect</option>
-          <option value="ar">🇸🇦 Arabic</option>
-          <option value="zh">🇨🇳 Chinese (Simplified)</option>
-          <option value="zh-tw">🇹🇼 Chinese (Traditional)</option>
-          <option value="cs">🇨🇿 Czech</option>
-          <option value="da">🇩🇰 Danish</option>
-          <option value="nl">🇳🇱 Dutch</option>
+        </select>
+      </div>
+      <div class="form-group">
+        <label>Target Language</label>
+        <select id="targetLang">
           <option value="en">🇬🇧 English</option>
-          <option value="fi">🇫🇮 Finnish</option>
-          <option value="fr">🇫🇷 French</option>
-          <option value="de">🇩🇪 German</option>
-          <option value="el">🇬🇷 Greek</option>
-          <option value="he">🇮🇱 Hebrew</option>
-          <option value="hi">🇮🇳 Hindi</option>
-          <option value="hu">🇭🇺 Hungarian</option>
-          <option value="id">🇮🇩 Indonesian</option>
-          <option value="it">🇮🇹 Italian</option>
-          <option value="ja">🇯🇵 Japanese</option>
-          <option value="ko">🇰🇷 Korean</option>
-          <option value="no">🇳🇴 Norwegian</option>
-          <option value="fa">🇮🇷 Persian</option>
-          <option value="pl">🇵🇱 Polish</option>
-          <option value="pt">🇵🇹 Portuguese</option>
-          <option value="ro">🇷🇴 Romanian</option>
-          <option value="ru">🇷🇺 Russian</option>
-          <option value="es">🇪🇸 Spanish</option>
-          <option value="sv">🇸🇪 Swedish</option>
-          <option value="th">🇹🇭 Thai</option>
-          <option value="tr">🇹🇷 Turkish</option>
-          <option value="uk">🇺🇦 Ukrainian</option>
-          <option value="ur">🇵🇰 Urdu</option>
-          <option value="vi">🇻🇳 Vietnamese</option>
         </select>
       </div>
-
-      <div class="field-group">
-        <label for="target-lang">Target Language</label>
-        <select id="target-lang">
-          <option value="en" selected>🇬🇧 English</option>
-          <option value="ar">🇸🇦 Arabic</option>
-          <option value="zh">🇨🇳 Chinese (Simplified)</option>
-          <option value="zh-tw">🇹🇼 Chinese (Traditional)</option>
-          <option value="cs">🇨🇿 Czech</option>
-          <option value="da">🇩🇰 Danish</option>
-          <option value="nl">🇳🇱 Dutch</option>
-          <option value="fi">🇫🇮 Finnish</option>
-          <option value="fr">🇫🇷 French</option>
-          <option value="de">🇩🇪 German</option>
-          <option value="el">🇬🇷 Greek</option>
-          <option value="he">🇮🇱 Hebrew</option>
-          <option value="hi">🇮🇳 Hindi</option>
-          <option value="hu">🇭🇺 Hungarian</option>
-          <option value="id">🇮🇩 Indonesian</option>
-          <option value="it">🇮🇹 Italian</option>
-          <option value="ja">🇯🇵 Japanese</option>
-          <option value="ko">🇰🇷 Korean</option>
-          <option value="no">🇳🇴 Norwegian</option>
-          <option value="fa">🇮🇷 Persian</option>
-          <option value="pl">🇵🇱 Polish</option>
-          <option value="pt">🇵🇹 Portuguese</option>
-          <option value="ro">🇷🇴 Romanian</option>
-          <option value="ru">🇷🇺 Russian</option>
-          <option value="es">🇪🇸 Spanish</option>
-          <option value="sv">🇸🇪 Swedish</option>
-          <option value="th">🇹🇭 Thai</option>
-          <option value="tr">🇹🇷 Turkish</option>
-          <option value="uk">🇺🇦 Ukrainian</option>
-          <option value="ur">🇵🇰 Urdu</option>
-          <option value="vi">🇻🇳 Vietnamese</option>
-        </select>
-      </div>
-
-      <div class="fields-row">
-        <div class="field-group">
-          <label for="start-page">Start Page</label>
-          <input type="number" id="start-page" value="1" min="1" placeholder="1"/>
+      <div class="form-row">
+        <div class="form-group">
+          <label>Start Page</label>
+          <input type="number" id="startPage" value="1" min="1">
         </div>
-        <div class="field-group">
-          <label for="end-page">End Page</label>
-          <input type="text" id="end-page" value="All" placeholder="All"/>
+        <div class="form-group">
+          <label>End Page</label>
+          <input type="number" id="endPage" placeholder="All" min="1">
         </div>
       </div>
-
-      <div class="field-group">
-        <label for="batch-size">Pages per Batch</label>
-        <select id="batch-size">
+      <div class="form-group">
+        <label>Pages per Batch</label>
+        <select id="batchSize">
           <option value="2">2 pages (safer)</option>
           <option value="3" selected>3 pages (recommended)</option>
           <option value="4">4 pages (faster)</option>
         </select>
       </div>
     </div>
+  </div>
 
-    <!-- CONTROLS PANEL -->
-    <div class="panel controls-panel">
-      <div class="panel-title">
-        <span class="title-icon">⚙️</span>
-        Controls
-      </div>
-      <div class="btn-group">
-        <button class="btn btn-primary" id="btn-start">
-          ▶&nbsp; Begin Translation
-        </button>
-        <button class="btn btn-secondary" id="btn-pause" disabled>
-          ⏸&nbsp; Pause
-        </button>
-        <button class="btn btn-danger" id="btn-stop" disabled>
-          ⏹&nbsp; Halt
-        </button>
-        <button class="btn btn-success" id="btn-download" disabled>
-          ⬇&nbsp; Download PDF
-        </button>
+  <!-- CONTROLS -->
+  <div class="card">
+    <h2><span class="icon">▶️</span> Controls</h2>
+    <div class="btn-row">
+      <button class="btn btn-primary btn-lg" id="startBtn" onclick="startTranslation()">▶ Start Translation</button>
+      <button class="btn btn-orange hidden" id="pauseBtn" onclick="togglePause()">⏸ Pause</button>
+      <button class="btn btn-red hidden" id="stopBtn" onclick="stopTranslation()">⏹ Stop</button>
+      <button class="btn btn-blue hidden" id="downloadBtn" onclick="downloadPDF()">⬇ Download PDF</button>
+    </div>
+  </div>
+
+  <!-- PROGRESS -->
+  <div class="card hidden" id="progressCard">
+    <h2><span class="icon">📊</span> Progress</h2>
+    <div id="queueBanner" class="queue-banner hidden">
+      <div class="q-icon pulse">⏳</div>
+      <div class="q-text">
+        <div class="q-title">Waiting in queue...</div>
+        <div class="q-sub" id="queueInfo">Position: — in queue</div>
       </div>
     </div>
-
-    <!-- PROGRESS PANEL -->
-    <div class="panel progress-panel">
-      <div class="panel-title">
-        <span class="title-icon">📊</span>
-        Translation Progress
-      </div>
-
-      <div class="queue-status" id="queue-status">
-        <span>⏳</span>
-        <span id="queue-text">Awaiting your manuscript…</span>
-        <span style="margin-left:auto; font-style:normal; font-size:.8rem; color:var(--parchment-ghost);">
-          Position: <strong id="queue-position">—</strong> in queue
-        </span>
-      </div>
-
-      <div class="progress-stats">
-        <div class="stat-box">
-          <span class="stat-value" id="stat-pages-done">0</span>
-          <span class="stat-label">Pages Done</span>
-        </div>
-        <div class="stat-box">
-          <span class="stat-value" id="stat-total">—</span>
-          <span class="stat-label">Total Pages</span>
-        </div>
-        <div class="stat-box">
-          <span class="stat-value" id="stat-remaining">—</span>
-          <span class="stat-label">Est. Remaining</span>
-        </div>
-        <div class="stat-box">
-          <span class="stat-value" id="stat-speed">—</span>
-          <span class="stat-label">Pages / min</span>
-        </div>
-      </div>
-
-      <div class="progress-bar-wrap">
-        <div class="progress-bar-label">
-          <span>Progress</span>
-          <span id="progress-pct">0%</span>
-        </div>
-        <div class="progress-bar-track">
-          <div class="progress-bar-fill" id="progress-fill"></div>
-        </div>
-      </div>
-
-      <p class="progress-text" id="progress-message">Initializing…</p>
+    <div class="stats-grid">
+      <div class="stat-box"><div class="stat-num" id="statDone">0</div><div class="stat-label">Pages Done</div></div>
+      <div class="stat-box"><div class="stat-num" id="statTotal">—</div><div class="stat-label">Total Pages</div></div>
+      <div class="stat-box"><div class="stat-num" id="statETA">—</div><div class="stat-label">Est. Remaining</div></div>
+      <div class="stat-box"><div class="stat-num" id="statRate">—</div><div class="stat-label">Pages/min</div></div>
     </div>
+    <div class="progress-wrap"><div class="progress-fill" id="progressBar" style="width:0%"></div></div>
+    <div class="progress-label" id="progressLabel">Initializing...</div>
+    <hr class="divider">
+    <div class="log-box" id="logBox"></div>
+  </div>
 
-    <!-- LIVE PREVIEW PANEL -->
-    <div class="panel preview-panel">
-      <div class="panel-title">
-        <span class="title-icon">📖</span>
-        Live Translation Preview
-      </div>
-      <div class="preview-area" id="preview-area">
-        <p class="preview-empty" id="preview-empty">
-          Translations will appear here as each batch completes…
-        </p>
-      </div>
-    </div>
+  <!-- PREVIEW -->
+  <div class="card hidden" id="previewCard">
+    <h2><span class="icon">📖</span> Live Translation Preview</h2>
+    <div class="preview-box" id="previewBox"><em style="color:var(--muted)">Translations will appear here as each batch completes...</em></div>
+  </div>
 
-  </div><!-- end .main-grid -->
 
-  <footer>
-    <p>DocuTranslate &mdash; Powered by <a href="https://deepmind.google/technologies/gemini/" target="_blank">Google Gemini</a> &bull; All translations processed securely in the cloud</p>
-  </footer>
 
-</div><!-- end .page-wrapper -->
+</div><!-- end main -->
 
-<!-- ═══════════════════════════════════════════
-     JAVASCRIPT — UI INTERACTIONS
-     (Preserves all IDs your existing app.js expects)
-═══════════════════════════════════════════ -->
 <script>
-/* ── Drag & Drop ── */
-const dropZone   = document.getElementById('drop-zone');
-const fileInput  = document.getElementById('file-input');
-const fileInfo   = document.getElementById('file-info');
-const fileName   = document.getElementById('file-name');
-const fileSizeEl = document.getElementById('file-size');
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
 
-function formatBytes(b) {
-  if (b < 1024) return b + ' B';
-  if (b < 1024*1024) return (b/1024).toFixed(1) + ' KB';
-  return (b/(1024*1024)).toFixed(2) + ' MB';
-}
+// ── State ──────────────────────────────────────────────
+let pdfDoc = null, totalPages = 0, translations = {}, paused = false, stopped = false;
+let pagesDone = 0, startTime = null;
 
-function handleFile(file) {
-  if (!file || file.type !== 'application/pdf') { showToast('Please select a valid PDF file.', 'error'); return; }
-  fileName.textContent = file.name;
-  fileSizeEl.textContent = formatBytes(file.size);
-  fileInfo.classList.add('visible');
-  showToast('Manuscript loaded: ' + file.name, 'success');
-}
+// Auto-detect server URL (same origin — works perfectly on Vercel)
+const serverUrl = window.location.origin;
 
-dropZone.addEventListener('click', () => fileInput.click());
-dropZone.addEventListener('keydown', e => { if (e.key === 'Enter' || e.key === ' ') fileInput.click(); });
-fileInput.addEventListener('change', () => fileInput.files[0] && handleFile(fileInput.files[0]));
-
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('dragover'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('dragover'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropZone.classList.remove('dragover');
-  const f = e.dataTransfer.files[0];
-  if (f) { fileInput.files = e.dataTransfer.files; handleFile(f); }
+// ── Init ───────────────────────────────────────────────
+// Auto-connect on load silently
+window.addEventListener('load', async () => {
+  try {
+    const r = await fetch(`${serverUrl}/api/translate?action=queue`);
+    if (r.ok) {
+      document.getElementById('serverStatus').innerHTML =
+        '<div style="background:rgba(35,134,54,0.15);border:1px solid rgba(35,134,54,0.4);border-radius:8px;padding:8px 14px;font-size:0.82em;color:#3fb950;margin-bottom:4px;">✅ AI Translation Server — Online & Ready</div>';
+      loadLanguages();
+    }
+  } catch(e) {
+    document.getElementById('serverStatus').innerHTML =
+      '<div style="background:rgba(218,54,51,0.1);border:1px solid rgba(218,54,51,0.3);border-radius:8px;padding:8px 14px;font-size:0.82em;color:#f85149;margin-bottom:4px;">⚠️ Server offline — please check your deployment</div>';
+  }
 });
 
-/* ── Progress bar updater (called by your existing translation logic) ── */
-window.updateProgress = function(done, total) {
-  const pct = total > 0 ? Math.round((done/total)*100) : 0;
-  document.getElementById('stat-pages-done').textContent  = done;
-  document.getElementById('stat-total').textContent       = total || '—';
-  document.getElementById('progress-fill').style.width   = pct + '%';
-  document.getElementById('progress-pct').textContent    = pct + '%';
-};
-
-/* ── Toast notification ── */
-function showToast(msg, type = '') {
-  const old = document.querySelector('.toast');
-  if (old) old.remove();
-  const t = document.createElement('div');
-  t.className = 'toast ' + type;
-  t.textContent = msg;
-  document.body.appendChild(t);
-  setTimeout(() => {
-    t.style.transition = 'opacity .4s';
-    t.style.opacity = '0';
-    setTimeout(() => t.remove(), 420);
-  }, 3200);
+async function loadLanguages() {
+  try {
+    const r = await fetch(`${serverUrl}/api/translate?action=languages`);
+    const data = await r.json();
+    populateLangs(data.languages);
+  } catch(e) {
+    // Use fallback list
+    populateLangs(FALLBACK_LANGS);
+  }
 }
-window.showToast = showToast;
 
-/* ── Expose function to append preview batch ── */
-window.appendPreviewBatch = function(batchNum, text) {
-  const empty = document.getElementById('preview-empty');
-  if (empty) empty.remove();
-  const area = document.getElementById('preview-area');
-  const batch = document.createElement('div');
-  batch.className = 'preview-batch';
-  batch.innerHTML = `<div class="preview-batch-header">Batch ${batchNum}</div><p>${text.replace(/\n/g,'<br/>')}</p>`;
-  area.appendChild(batch);
-  area.scrollTop = area.scrollHeight;
+const FALLBACK_LANGS = {
+  en:"English", ar:"Arabic", fr:"French", es:"Spanish", de:"German",
+  it:"Italian", pt:"Portuguese", ru:"Russian", zh:"Chinese (Simplified)",
+  ja:"Japanese", ko:"Korean", tr:"Turkish", fa:"Persian (Farsi)",
+  ur:"Urdu", hi:"Hindi", bn:"Bengali", id:"Indonesian", ms:"Malay",
+  nl:"Dutch", pl:"Polish", sv:"Swedish", no:"Norwegian", da:"Danish",
+  fi:"Finnish", cs:"Czech", ro:"Romanian", hu:"Hungarian", el:"Greek",
+  he:"Hebrew", th:"Thai", vi:"Vietnamese", uk:"Ukrainian", bg:"Bulgarian",
+  hr:"Croatian", sk:"Slovak", ca:"Catalan", az:"Azerbaijani",
+  kk:"Kazakh", uz:"Uzbek", sw:"Swahili", am:"Amharic", so:"Somali", ha:"Hausa"
 };
-</script>
 
-<!--
-  ╔══════════════════════════════════════════════════════════╗
-  ║  NOTE TO DEVELOPER                                        ║
-  ║  All IDs are preserved from the original:                 ║
-  ║  #file-input, #source-lang, #target-lang, #start-page,   ║
-  ║  #end-page, #batch-size, #btn-start, #btn-pause,          ║
-  ║  #btn-stop, #btn-download, #preview-area,                 ║
-  ║  #stat-pages-done, #stat-total, #stat-remaining,          ║
-  ║  #stat-speed, #queue-text, #queue-position,               ║
-  ║  #progress-fill, #progress-pct, #progress-message,        ║
-  ║  #status-text, #status-dot                                ║
-  ║  Drop your existing app.js below this comment.            ║
-  ╚══════════════════════════════════════════════════════════╝
--->
+const LANG_FLAGS = {
+  en:"🇬🇧", ar:"🇸🇦", fr:"🇫🇷", es:"🇪🇸", de:"🇩🇪", it:"🇮🇹", pt:"🇵🇹",
+  ru:"🇷🇺", zh:"🇨🇳", ja:"🇯🇵", ko:"🇰🇷", tr:"🇹🇷", fa:"🇮🇷", ur:"🇵🇰",
+  hi:"🇮🇳", bn:"🇧🇩", id:"🇮🇩", ms:"🇲🇾", nl:"🇳🇱", pl:"🇵🇱", sv:"🇸🇪",
+  no:"🇳🇴", da:"🇩🇰", fi:"🇫🇮", cs:"🇨🇿", ro:"🇷🇴", hu:"🇭🇺", el:"🇬🇷",
+  he:"🇮🇱", th:"🇹🇭", vi:"🇻🇳", uk:"🇺🇦", bg:"🇧🇬", hr:"🇭🇷", sk:"🇸🇰",
+  ca:"🏴", az:"🇦🇿", kk:"🇰🇿", uz:"🇺🇿", sw:"🇰🇪", am:"🇪🇹", so:"🇸🇴", ha:"🇳🇬"
+};
+
+function populateLangs(langs) {
+  const src = document.getElementById('sourceLang');
+  const tgt = document.getElementById('targetLang');
+  src.innerHTML = '<option value="auto">🔍 Auto-detect</option>';
+  tgt.innerHTML = '';
+  for (const [code, name] of Object.entries(langs)) {
+    const flag = LANG_FLAGS[code] || '🌐';
+    src.innerHTML += `<option value="${code}">${flag} ${name}</option>`;
+    tgt.innerHTML += `<option value="${code}" ${code==='en'?'selected':''}>${flag} ${name}</option>`;
+  }
+}
+populateLangs(FALLBACK_LANGS);
+
+
+
+// ── File Upload ────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
+document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+
+async function handleFile(file) {
+  if (!file || !file.name.endsWith('.pdf')) { alert('Please select a PDF file.'); return; }
+  const ab = await file.arrayBuffer();
+  pdfDoc = await pdfjsLib.getDocument({ data: ab }).promise;
+  totalPages = pdfDoc.numPages;
+  document.getElementById('endPage').value = totalPages;
+  document.getElementById('endPage').max = totalPages;
+  document.getElementById('startPage').max = totalPages;
+  document.getElementById('statTotal').textContent = totalPages;
+  const fi = document.getElementById('fileInfo');
+  fi.className = 'file-info';
+  fi.innerHTML = `<div class="fi-icon">📄</div><div><div class="fi-name">${file.name}</div><div class="fi-meta">${totalPages} pages · ${(file.size/1024/1024).toFixed(1)} MB</div></div>`;
+  log(`✓ Loaded: ${file.name} (${totalPages} pages)`, 'ok');
+}
+
+// ── Page rendering ─────────────────────────────────────
+async function renderPage(pageNum) {
+  const page = await pdfDoc.getPage(pageNum);
+  const viewport = page.getViewport({ scale: 1.4 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+}
+
+// ── Translation ────────────────────────────────────────
+async function submitBatch(images, pageNums, sourceLang, targetLang) {
+  const r = await fetch(`${serverUrl}/api/translate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ images, pageNums, sourceLang, targetLang })
+  });
+  if (!r.ok) throw new Error(`Server error ${r.status}`);
+  return await r.json(); // { id, status, queuePos }
+}
+
+async function pollJob(id) {
+  const qBanner = document.getElementById('queueBanner');
+  while (true) {
+    await new Promise(r => setTimeout(r, 1500));
+    const r = await fetch(`${serverUrl}/api/translate?action=status&id=${id}`);
+    const d = await r.json();
+    if (d.status === 'queued' || d.status === 'processing') {
+      if (d.queuePos > 1) {
+        qBanner.classList.remove('hidden');
+        document.getElementById('queueInfo').textContent = `Position ${d.queuePos} in queue — please wait`;
+      } else {
+        qBanner.classList.add('hidden');
+      }
+      continue;
+    }
+    qBanner.classList.add('hidden');
+    if (d.status === 'done') return d.translations;
+    if (d.status === 'error') throw new Error(d.error);
+  }
+}
+
+async function startTranslation() {
+  if (!pdfDoc) { alert('Please upload a PDF first.'); return; }
+  if (!serverUrl) { alert('Please configure your server URL first.'); return; }
+
+  const batchSize = parseInt(document.getElementById('batchSize').value);
+  const startPage = parseInt(document.getElementById('startPage').value) || 1;
+  const endPage = parseInt(document.getElementById('endPage').value) || totalPages;
+  const srcLang = document.getElementById('sourceLang').value;
+  const tgtLang = document.getElementById('targetLang').value;
+
+  translations = {};
+  pagesDone = 0;
+  paused = false;
+  stopped = false;
+  startTime = Date.now();
+
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('pauseBtn').classList.remove('hidden');
+  document.getElementById('stopBtn').classList.remove('hidden');
+  document.getElementById('progressCard').classList.remove('hidden');
+  document.getElementById('previewCard').classList.remove('hidden');
+  document.getElementById('statTotal').textContent = endPage - startPage + 1;
+
+  const srcName = document.getElementById('sourceLang').options[document.getElementById('sourceLang').selectedIndex].text;
+  const tgtName = document.getElementById('targetLang').options[document.getElementById('targetLang').selectedIndex].text;
+  log(`Starting: pages ${startPage}–${endPage} | ${srcName} → ${tgtName} | batch size ${batchSize}`, 'info');
+
+  for (let p = startPage; p <= endPage && !stopped; p += batchSize) {
+    while (paused && !stopped) await new Promise(r => setTimeout(r, 500));
+    if (stopped) break;
+
+    const batch = [];
+    for (let j = p; j < Math.min(p + batchSize, endPage + 1); j++) batch.push(j);
+
+    log(`Rendering pages ${batch.join(', ')}...`, 'dim');
+    try {
+      const images = await Promise.all(batch.map(renderPage));
+      log(`Submitting pages ${batch.join(', ')} to server...`, 'info');
+      const job = await submitBatch(images, batch, srcLang, tgtLang);
+
+      if (job.queuePos > 1) log(`Queued at position ${job.queuePos}. Waiting...`, 'warn');
+      const result = await pollJob(job.id);
+
+      Object.assign(translations, result);
+      pagesDone += batch.length;
+      updateProgress(pagesDone, endPage - startPage + 1);
+      updatePreview(batch, result);
+      log(`✓ Pages ${batch.join(', ')} done`, 'ok');
+    } catch(err) {
+      log(`✗ Error on pages ${batch.join(',')}: ${err.message}`, 'err');
+      log('Retrying in 8 seconds...', 'warn');
+      await new Promise(r => setTimeout(r, 8000));
+      p -= batchSize;
+    }
+  }
+
+  if (!stopped) {
+    log('✅ All pages translated! Generating PDF...', 'ok');
+    document.getElementById('downloadBtn').classList.remove('hidden');
+  }
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('pauseBtn').classList.add('hidden');
+  document.getElementById('stopBtn').classList.add('hidden');
+  if (!stopped && Object.keys(translations).length > 0) downloadPDF();
+}
+
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('pauseBtn');
+  btn.textContent = paused ? '▶ Resume' : '⏸ Pause';
+  btn.className = paused ? 'btn btn-primary' : 'btn btn-orange';
+  log(paused ? 'Paused.' : 'Resumed.', 'warn');
+}
+
+function stopTranslation() {
+  if (!confirm('Stop translation? Progress so far will still be available to download.')) return;
+  stopped = true;
+  log('Stopped by user. Download partial results below.', 'warn');
+  document.getElementById('downloadBtn').classList.remove('hidden');
+}
+
+// ── UI Helpers ─────────────────────────────────────────
+function updateProgress(done, total) {
+  const pct = total > 0 ? (done / total * 100) : 0;
+  document.getElementById('progressBar').style.width = pct.toFixed(1) + '%';
+  document.getElementById('statDone').textContent = done;
+  document.getElementById('progressLabel').textContent = `${done}/${total} pages (${pct.toFixed(1)}%)`;
+  if (startTime && done > 0) {
+    const elapsed = (Date.now() - startTime) / 1000;
+    const rate = done / elapsed * 60;
+    document.getElementById('statRate').textContent = rate.toFixed(1);
+    const rem = (total - done) / (done / elapsed);
+    const m = Math.floor(rem / 60), s = Math.floor(rem % 60);
+    document.getElementById('statETA').textContent = `${m}m ${s}s`;
+  }
+}
+
+function updatePreview(batch, result) {
+  const box = document.getElementById('previewBox');
+  if (box.querySelector('em')) box.innerHTML = '';
+  for (const pn of batch) {
+    const t = document.createElement('div');
+    t.className = 'preview-page-title';
+    t.textContent = `Page ${pn}`;
+    box.appendChild(t);
+    const d = document.createElement('div');
+    const txt = result[pn] || '[Empty]';
+    d.textContent = txt.length > 400 ? txt.substring(0, 400) + '…' : txt;
+    d.style.marginBottom = '12px';
+    box.appendChild(d);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+function log(msg, type = 'dim') {
+  const box = document.getElementById('logBox');
+  const el = document.createElement('div');
+  el.className = `log-line ${type}`;
+  const t = new Date().toLocaleTimeString();
+  el.textContent = `[${t}] ${msg}`;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ── PDF Generation ─────────────────────────────────────
+function downloadPDF() {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+  const W = 210, H = 297, mL = 22, mR = 22, mT = 28, mB = 22;
+  const cW = W - mL - mR;
+
+  const tgtName = document.getElementById('targetLang').options[document.getElementById('targetLang').selectedIndex].text;
+  const srcName = document.getElementById('sourceLang').options[document.getElementById('sourceLang').selectedIndex].text;
+
+  // ── Title page ──
+  doc.setFillColor(13, 17, 23);
+  doc.rect(0, 0, W, H, 'F');
+  doc.setDrawColor(227, 179, 65);
+  doc.setLineWidth(0.4);
+  doc.rect(8, 8, W-16, H-16);
+
+  doc.setTextColor(227, 179, 65);
+  doc.setFont('helvetica', 'bold');
+  doc.setFontSize(24);
+  doc.text('DocuTranslate', W/2, 60, { align: 'center' });
+
+  doc.setFontSize(16);
+  doc.setTextColor(240, 246, 252);
+  const titleLines = doc.splitTextToSize('AI-Powered Document Translation', cW);
+  doc.text(titleLines, W/2, 80, { align: 'center' });
+
+  doc.setDrawColor(100, 100, 100);
+  doc.line(30, 95, W-30, 95);
+
+  doc.setFontSize(11);
+  doc.setTextColor(139, 148, 158);
+  doc.setFont('helvetica', 'normal');
+  doc.text(`Source Language: ${srcName}`, W/2, 110, { align: 'center' });
+  doc.text(`Translated to: ${tgtName}`, W/2, 120, { align: 'center' });
+  doc.text(`Pages translated: ${Object.keys(translations).length}`, W/2, 130, { align: 'center' });
+  doc.text(`Generated: ${new Date().toLocaleString()}`, W/2, 140, { align: 'center' });
+
+  doc.setFontSize(9);
+  doc.setTextColor(80, 88, 96);
+  doc.text('Powered by Google Gemini AI · DocuTranslate', W/2, H-20, { align: 'center' });
+
+  doc.addPage();
+
+  // ── Content pages ──
+  const sorted = Object.keys(translations).map(Number).sort((a,b)=>a-b);
+
+  for (const pn of sorted) {
+    const text = translations[pn] || '';
+    const isBlank = !text || text.trim() === '[Blank page]' || text.trim() === '';
+
+    // White page
+    doc.setFillColor(255, 255, 255);
+    doc.rect(0, 0, W, H, 'F');
+
+    // Header bar
+    doc.setFillColor(13, 17, 23);
+    doc.rect(0, 0, W, 16, 'F');
+    doc.setFontSize(8);
+    doc.setFont('helvetica', 'italic');
+    doc.setTextColor(139, 148, 158);
+    doc.text('DocuTranslate', mL, 10);
+    doc.text(`Page ${pn}  ·  ${tgtName}`, W - mR, 10, { align: 'right' });
+
+    if (isBlank) {
+      doc.setFontSize(10);
+      doc.setTextColor(180, 180, 180);
+      doc.setFont('helvetica', 'italic');
+      doc.text(`— Page ${pn}: Blank —`, W/2, H/2, { align: 'center' });
+      doc.addPage();
+      continue;
+    }
+
+    doc.setTextColor(30, 30, 35);
+    doc.setFontSize(11);
+    doc.setFont('times', 'normal');
+
+    const lines = doc.splitTextToSize(text, cW);
+    let y = mT + 5;
+    const lH = 6.2;
+
+    for (const line of lines) {
+      if (y + lH > H - mB) {
+        doc.addPage();
+        doc.setFillColor(255, 255, 255);
+        doc.rect(0, 0, W, H, 'F');
+        doc.setFillColor(13, 17, 23);
+        doc.rect(0, 0, W, 16, 'F');
+        doc.setFontSize(8);
+        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(139, 148, 158);
+        doc.text('DocuTranslate', mL, 10);
+        doc.text(`Page ${pn} (cont.)  ·  ${tgtName}`, W - mR, 10, { align: 'right' });
+        doc.setTextColor(30, 30, 35);
+        doc.setFontSize(11);
+        doc.setFont('times', 'normal');
+        y = mT + 5;
+      }
+      doc.text(line, mL, y);
+      y += lH;
+    }
+    doc.addPage();
+  }
+
+  // Remove last blank page
+  if (doc.getNumberOfPages() > 1) doc.deletePage(doc.getNumberOfPages());
+
+  const fname = `DocuTranslate_${tgtName}_${new Date().toISOString().slice(0,10)}.pdf`;
+  doc.save(fname);
+  log(`✅ Downloaded: ${fname}`, 'ok');
+}
+</script>
 </body>
 </html>
