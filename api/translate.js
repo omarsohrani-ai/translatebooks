@@ -249,6 +249,12 @@ function isGroqDailyQuota(msg) {
          (msg.includes('429') || msg.includes('rate_limit_exceeded') ||
           msg.includes('tokens_per_day') || msg.includes('requests_per_day'));
 }
+// Gemini RECITATION = safety filter blocked output (common with religious/classical texts)
+// Groq doesn't have this filter — automatically fall back when this happens.
+function isRecitation(msg) {
+  return msg.includes('RECITATION') || msg.includes('recitation') ||
+         msg.includes('SAFETY') || msg.includes('finish_reason: SAFETY');
+}
 
 // ── Queue runner ───────────────────────────────────────────────────────────
 async function runQueue() {
@@ -258,8 +264,9 @@ async function runQueue() {
   while (queue.length > 0) {
     const job = queue[0];
 
-    // Expire abandoned sessions
-    if (Date.now() - job.timestamp > 600000) {
+    // Expire abandoned sessions after 3 minutes (not 10)
+    // Shorter timeout means zombie jobs from failed sessions clear faster
+    if (Date.now() - job.timestamp > 180000) {
       jobResults[job.id] = { status: "error", error: "Job expired — session timed out" };
       queue.shift();
       continue;
@@ -277,6 +284,21 @@ async function runQueue() {
 
     } catch (err) {
       const msg = err.message || '';
+
+      // ── Gemini RECITATION / SAFETY block ─────────────────────────────
+      // Gemini blocks classical religious texts (hadith, Quran, Ibn Arabi etc.)
+      // as "recitation of protected content". Groq has no such filter.
+      if (isRecitation(msg) && activeProvider === 'gemini' && GROQ_API_KEY) {
+        console.log('[translate] Gemini RECITATION block — switching to Groq for this job');
+        try {
+          const savedProvider = activeProvider;
+          activeProvider = 'groq';
+          const translations = await processJob(job);
+          activeProvider = savedProvider; // restore — only this job uses Groq
+          jobResults[job.id] = { status: "done", translations, provider: 'groq' };
+        } catch (groqErr) {
+          jobResults[job.id] = { status: "error", error: `[Recitation block, Groq fallback failed] ${groqErr.message}` };
+        }
 
       // ── Gemini daily quota exhausted ──────────────────────────────────
       if (isGeminiDailyQuota(msg)) {
