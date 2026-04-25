@@ -24,42 +24,51 @@ const LANGUAGES = {
 };
 
 // ── Robust page extractor ──────────────────────────────────────────────────
-// gemini-2.5-flash is a thinking model that can:
-//   • wrap output in markdown code fences (```...```)
-//   • add thinking tags (<think>...</think>)
-//   • omit the final ===END=== on the last page of a batch
-//   • add extra whitespace around delimiters
-// This function handles all those cases gracefully.
+// Uses a split-based approach instead of per-page regex.
+// Per-page regex has a known flaw: searching for page N can partially match
+// page NN (e.g. regex for page 1 can interfere with ===PAGE 11===).
+// Split-based parsing avoids this entirely by slicing the text at every
+// ===PAGE N=== boundary, then indexing by page number.
 function extractPages(raw, pageNums) {
-  // 1. Strip markdown code fences
-  let text = raw.replace(/^```[\w]*\s*/m, '').replace(/\s*```\s*$/m, '');
+  // 1. Strip markdown code fences (model sometimes wraps output)
+  let text = raw
+    .replace(/^```[\w]*\n?/m, '')
+    .replace(/\n?```\s*$/m, '');
 
-  // 2. Strip XML-style thinking tags (some model versions include these)
-  text = text.replace(/<think>[\s\S]*?<\/think>/gi, '');
-  text = text.replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+  // 2. Strip thinking / reasoning tags
+  text = text
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
 
-  // 3. Normalise delimiter spacing (model sometimes outputs ===PAGE 11 === etc.)
-  text = text.replace(/===\s*PAGE\s+(\d+)\s*===/gi, (_, n) => `===PAGE ${n}===`);
-  text = text.replace(/===\s*END\s*===/gi, '===END===');
+  // 3. Normalise delimiters — handle extra spaces, mixed case, etc.
+  //    Add a newline before each ===PAGE so the split below always works
+  text = text
+    .replace(/===\s*PAGE\s+(\d+)\s*===/gi, (_, n) => `\n===PAGE ${n}===\n`)
+    .replace(/===\s*END\s*===/gi, '\n===END===\n');
 
-  const parsed = {};
+  // 4. Split on ===PAGE N=== markers — gives us one segment per page
+  //    Segment format: "N\n<content>" (the split keeps the capture group)
+  const segments = text.split(/\n===PAGE (\d+)===\n/);
+  // segments[0]  = text before first page (discard)
+  // segments[1]  = page number string "9"
+  // segments[2]  = page 9 content
+  // segments[3]  = page number string "10"  ... etc.
 
-  for (const pn of pageNums) {
-    // Match content between ===PAGE N=== and either ===END===, the next ===PAGE,
-    // or end-of-string — so a missing final ===END=== never breaks extraction.
-    const re = new RegExp(
-      `===PAGE ${pn}===\\s*([\\s\\S]*?)(?:===END===|===PAGE \\d+===|$)`,
-      'i'
-    );
-    const m = text.match(re);
-    if (m && m[1].trim()) {
-      // Remove any trailing ===END=== fragment the lazy match pulled in
-      parsed[pn] = m[1].replace(/===END===/gi, '').trim();
-    } else {
-      parsed[pn] = `[Could not extract page ${pn}]`;
-    }
+  const blocks = {};
+  for (let i = 1; i < segments.length - 1; i += 2) {
+    const pn  = parseInt(segments[i], 10);
+    // Strip any trailing ===END=== from the content block
+    const content = segments[i + 1]
+      .replace(/\n?===END===\n?/gi, '')
+      .trim();
+    if (content) blocks[pn] = content;
   }
 
+  // 5. Build result — fall back gracefully for any missing page
+  const parsed = {};
+  for (const pn of pageNums) {
+    parsed[pn] = blocks[pn] || `[Could not extract page ${pn}]`;
+  }
   return parsed;
 }
 
@@ -136,8 +145,12 @@ async function runQueue() {
       if (jobResults[j.id]) jobResults[j.id].queuePos = idx + 1;
     });
 
-    // 4 s gap keeps us inside the 15 RPM free-tier limit for gemini-2.5-flash-lite
-    await new Promise(r => setTimeout(r, 4000));
+    // Organic delay: 50–60 s random jitter between batches.
+    // Keeps throughput at ~1 RPM — well inside the 15 RPM free-tier limit —
+    // and avoids burst patterns that can trigger quota enforcement.
+    // Trade-off: a 400-page book takes ~2 hrs but never hits rate limits.
+    const delay = 50000 + Math.floor(Math.random() * 10000); // 50–60 s
+    await new Promise(r => setTimeout(r, delay));
   }
 
   isProcessing = false;
