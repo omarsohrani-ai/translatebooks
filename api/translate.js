@@ -59,6 +59,11 @@ you MUST output a separate ===PAGE N=== block for EVERY single page number liste
 Never merge two pages into one block. Never skip a page number.
 Each page image = one ===PAGE N=== block. No exceptions.
 
+STOP RULE — most important: Translate ONLY the exact text visible in each image.
+Once you have translated everything visible on the page, STOP immediately.
+Do NOT continue, repeat, or add anything after the visible text ends.
+Do NOT repeat any sentence, phrase, or paragraph more than once.
+
 Your response must contain EXACTLY ${pageNums.length} blocks in this format:
 
 ${pageNums.map(n =>
@@ -85,7 +90,7 @@ function extractPages(raw, pageNums) {
   for (let i = 1; i < segments.length - 1; i += 2) {
     const pn      = parseInt(segments[i], 10);
     const content = segments[i + 1].replace(/\n?===END===\n?/gi, '').trim();
-    if (content) blocks[pn] = content;
+    if (content) blocks[pn] = deduplicateContent(content);
   }
 
   const parsed = {};
@@ -95,17 +100,46 @@ function extractPages(raw, pageNums) {
   return parsed;
 }
 
+// Remove hallucinated repetitions: if a sentence appears 3+ times consecutively,
+// keep only the first 2 occurrences and truncate the rest.
+function deduplicateContent(text) {
+  const lines = text.split('\n');
+  const out   = [];
+  let lastLine = '', repeatCount = 0;
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (!trimmed) { out.push(line); lastLine = ''; repeatCount = 0; continue; }
+
+    if (trimmed === lastLine) {
+      repeatCount++;
+      if (repeatCount < 2) out.push(line); // allow one repeat at most
+      // silently drop further repetitions
+    } else {
+      out.push(line);
+      lastLine    = trimmed;
+      repeatCount = 0;
+    }
+  }
+
+  // Also catch paragraph-level repetition (same sentence repeated in a paragraph)
+  const result = out.join('\n');
+  // Find any sentence repeated 3+ times and keep only 2 occurrences
+  const sentenceRepeat = /(.{30,})\n(\1\n){2,}/g;
+  return result.replace(sentenceRepeat, '$1\n$1\n');
+}
+
 // ── Provider: Gemini ───────────────────────────────────────────────────────
 async function processWithGemini(job) {
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash-lite",
     generationConfig: {
-      // Cap output per batch to prevent hallucination loops on repetitive text.
-      // Dense Arabic manuscript: ~400 words/page × ~1.5 tokens/word × pages + overhead.
-      // 512 tokens per page is generous; 2048 covers a batch of 3 comfortably.
-      maxOutputTokens: Math.max(2048, job.pageNums.length * 600),
-      temperature: 0.1  // low temperature = less creative, less looping
+      // Tight token cap per page — prevents hallucination loops on dense/repetitive text.
+      // Dense Arabic manuscript page ≈ 300–400 translated words ≈ 400–550 tokens.
+      // 800 per page is generous enough for real content, tight enough to cut loops.
+      maxOutputTokens: job.pageNums.length * 800,
+      temperature: 0.1
     }
   });
 
@@ -155,7 +189,7 @@ async function processWithGroq(job) {
     body: JSON.stringify({
       model:      "meta-llama/llama-4-scout-17b-16e-instruct",
       messages:   [{ role: "user", content }],
-      max_tokens: Math.max(2048, job.pageNums.length * 600),
+      max_tokens: job.pageNums.length * 800,
       temperature: 0.1
     })
   });
