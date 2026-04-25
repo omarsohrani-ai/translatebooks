@@ -1158,12 +1158,8 @@ window.addEventListener('load', async () => {
   try {
     const r = await fetch(`${serverUrl}/api/translate?action=queue`);
     if (r.ok) {
-      const d = await r.json();
-      const providerLabel = d.provider === 'groq'
-        ? '🦙 Groq (Llama 4 Scout) — Gemini quota was exhausted'
-        : '✦ Gemini — Translation server online and ready';
       document.getElementById('serverStatus').innerHTML =
-        `<div class="status-ok">${providerLabel}</div>`;
+        '<div class="status-ok">✦ &ensp;Translation server is online and ready</div>';
       loadLanguages();
     }
   } catch(e) {
