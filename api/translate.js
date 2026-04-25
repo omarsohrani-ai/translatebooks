@@ -27,15 +27,21 @@ const LANGUAGES = {
 
 async function processJob(job) {
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
-  // ✅ FIXED: updated from deprecated gemini-1.5-flash to gemini-2.0-flash
+
+  // gemini-2.5-flash: best quality/free-quota balance for literary translation.
+  // Free tier: 10 RPM, ~250 RPD — well suited for batch translation.
+  // DO NOT use gemini-2.0-flash (deprecated March 2026) or
+  // gemini-2.5-flash-lite (lower quality, leaks untranslated foreign words).
   const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
 
   const targetLang = LANGUAGES[job.targetLang] || "English";
-  const sourceLang = job.sourceLang === "auto" ? "the source language (auto-detect)" : (LANGUAGES[job.sourceLang] || "Arabic");
+  const sourceLang = job.sourceLang === "auto"
+    ? "the source language (auto-detect)"
+    : (LANGUAGES[job.sourceLang] || "the source language");
 
   const parts = [];
 
-  // Add page images
+  // Add page images with labels
   for (let i = 0; i < job.images.length; i++) {
     parts.push({ text: `[Page ${job.pageNums[i]}]` });
     parts.push({
@@ -46,24 +52,27 @@ async function processJob(job) {
     });
   }
 
+  // Improved prompt: explicitly prevents untranslated foreign words leaking through.
+  // The old "keep original term in parentheses" instruction caused the model to
+  // preserve words from the source text instead of translating them.
   parts.push({
-    text: `You are a professional literary translator with native fluency in ${targetLang}. Translate ALL text visible in these scanned document page images from ${sourceLang} into ${targetLang}.
+    text: `You are a professional literary translator. Your task is to translate all text from these scanned document pages from ${sourceLang} into ${targetLang}.
 
-Critical rules:
-- Translate EVERY single word — do not leave any word in any other language
-- The output must contain ONLY ${targetLang} — no foreign words, no original-language terms
-- If a page is blank or has no meaningful text, write: [Blank page]
-- Translate title pages, chapter headings, and all body text
-- Preserve paragraph breaks and natural prose flow
-- Proper nouns (personal names, place names) may be transliterated phonetically into ${targetLang} script
-- Do NOT add translator notes, footnotes, or any commentary
-- Do NOT wrap output in markdown or quotes
+STRICT RULES — follow every one without exception:
+- Translate EVERY single word completely into ${targetLang}
+- Do NOT leave any word in the source language or any other language
+- Do NOT use parentheses to preserve original terms — translate everything
+- If the source text itself contains words from a third language (e.g. Latin, Italian, French embedded in a German text), translate those too into ${targetLang}
+- Preserve the original paragraph structure and line breaks
+- If a page is blank or contains no meaningful text, write exactly: [Blank page]
+- Do NOT add translator notes, footnotes, commentary, or explanations of any kind
+- Do NOT write anything outside the page blocks below
 
-Format your response EXACTLY as follows for each page (no extra text outside these blocks):
+Format your response EXACTLY as shown (no extra text before, between, or after the blocks):
 
-${job.pageNums.map(n => `===PAGE ${n}===\n[translation here]\n===END===`).join('\n\n')}
+${job.pageNums.map(n => `===PAGE ${n}===\n[your ${targetLang} translation here]\n===END===`).join('\n\n')}
 
-Translate every page shown above. Output must be in ${targetLang} only.`
+Translate every page shown above.`
   });
 
   const result = await model.generateContent(parts);
@@ -99,14 +108,15 @@ async function runQueue() {
       if (jobResults[j.id]) jobResults[j.id].queuePos = idx + 1;
     });
 
-    // Small delay between batches to respect rate limits
-    await new Promise(r => setTimeout(r, 1000));
+    // Delay between batches — gemini-2.5-flash free tier is 10 RPM,
+    // so a 6s gap keeps us comfortably within the limit.
+    await new Promise(r => setTimeout(r, 6000));
   }
 
   isProcessing = false;
 }
 
-// Clean up old results (older than 1 hour)
+// Clean up job results older than 1 hour
 function cleanupOldResults() {
   const now = Date.now();
   for (const id in jobResults) {
@@ -126,12 +136,12 @@ module.exports = async (req, res) => {
 
   const { action } = req.query;
 
-  // GET /api/translate?action=languages — return available languages
+  // GET /api/translate?action=languages
   if (req.method === "GET" && action === "languages") {
     return res.json({ languages: LANGUAGES });
   }
 
-  // GET /api/translate?action=status&id=xxx — check job status
+  // GET /api/translate?action=status&id=xxx
   if (req.method === "GET" && action === "status") {
     const { id } = req.query;
     if (!id || !jobResults[id]) {
@@ -144,7 +154,7 @@ module.exports = async (req, res) => {
     return res.json(jobResults[id]);
   }
 
-  // GET /api/translate?action=queue — queue info
+  // GET /api/translate?action=queue
   if (req.method === "GET" && action === "queue") {
     return res.json({ queueLength: queue.length, isProcessing });
   }
@@ -168,15 +178,32 @@ module.exports = async (req, res) => {
     }
 
     const id = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-    const job = { id, images, pageNums, sourceLang: sourceLang || "auto", targetLang: targetLang || "en", timestamp: Date.now() };
+    const job = {
+      id,
+      images,
+      pageNums,
+      sourceLang: sourceLang || "auto",
+      targetLang: targetLang || "en",
+      timestamp: Date.now()
+    };
 
     queue.push(job);
-    jobResults[id] = { status: "queued", queuePos: queue.length, queueLength: queue.length, timestamp: Date.now() };
+    jobResults[id] = {
+      status: "queued",
+      queuePos: queue.length,
+      queueLength: queue.length,
+      timestamp: Date.now()
+    };
 
     // Start processing queue (non-blocking)
     runQueue().catch(console.error);
 
-    return res.json({ id, status: "queued", queuePos: queue.length, queueLength: queue.length });
+    return res.json({
+      id,
+      status: "queued",
+      queuePos: queue.length,
+      queueLength: queue.length
+    });
   }
 
   return res.status(405).json({ error: "Method not allowed" });
