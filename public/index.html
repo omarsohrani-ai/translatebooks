@@ -1565,6 +1565,15 @@ function log(msg, type = 'dim') {
   box.scrollTop = box.scrollHeight;
 }
 
+// ── Mixed-script detector ──────────────────────────────────────
+// jsPDF's built-in Times font is Latin-1 only. Arabic, Hebrew, Persian,
+// CJK, Devanagari etc. render as þþ garbage bytes in the native text path.
+// Any page whose translation still contains these scripts (partial AI failure)
+// must be rendered via html2canvas instead.
+function containsNonLatin(text) {
+  return /[\u0600-\u06FF\u0750-\u077F\u08A0-\u08FF\uFB50-\uFDFF\uFE70-\uFEFF\u0900-\u097F\u4E00-\u9FFF\u3040-\u30FF\uAC00-\uD7AF\u0590-\u05FF\u0E00-\u0E7F]/.test(text);
+}
+
 // ── PDF Generation (theme-aware, RTL-aware) ────────────────────
 async function downloadPDF() {
   const { jsPDF } = window.jspdf;
@@ -1741,7 +1750,7 @@ async function downloadPDF() {
       doc.addPage();
     }
 
-  // ── LTR path: native jsPDF text ───────────────────────────
+  // ── LTR path: native jsPDF text (with mixed-script fallback) ─
   } else {
     for (const pn of sorted) {
       const text = translations[pn] || '';
@@ -1760,6 +1769,60 @@ async function downloadPDF() {
         doc.addPage(); continue;
       }
 
+      // ── Mixed-script fallback ──────────────────────────────
+      // If the AI left any non-Latin characters untranslated (Arabic, CJK, etc.),
+      // jsPDF's Times font renders them as þþ garbage. Use html2canvas instead,
+      // which lets the browser's Unicode engine handle any script correctly.
+      if (containsNonLatin(text)) {
+        const SCALE = 2, PX_MM = 96/25.4;
+        const imgH = H - 16 - mB - 10;
+        const divW = Math.round(cW * PX_MM * SCALE);
+        const divH = Math.round(imgH * PX_MM * SCALE);
+        const mixPx = Math.round((pdfFontSize / 11) * 11 * SCALE);
+
+        const div = document.createElement('div');
+        div.style.cssText = [
+          'position:fixed', 'top:0', 'left:-99999px',
+          `width:${divW}px`, `height:${divH}px`,
+          'overflow:hidden',
+          `background:${T.bg}`,
+          `color:${T.text}`,
+          // Lora handles Latin; Noto/Amiri handle Arabic fallback glyphs
+          "font-family:'Lora','Noto Nastaliq Urdu','Noto Sans Arabic','Amiri',serif",
+          `font-size:${mixPx}px`,
+          'line-height:1.85',
+          'direction:ltr', 'text-align:left',
+          // unicode-bidi:plaintext lets the browser auto-handle embedded RTL words
+          'unicode-bidi:plaintext',
+          `padding:${Math.round(10*SCALE)}px ${Math.round(14*SCALE)}px`,
+          'box-sizing:border-box', 'word-break:break-word', 'white-space:pre-wrap'
+        ].join(';');
+        div.textContent = text;
+        document.body.appendChild(div);
+
+        try {
+          await document.fonts.ready;
+          const canvas = await html2canvas(div, {
+            scale:1, useCORS:true, backgroundColor:T.bg, logging:false,
+            width:divW, height:divH
+          });
+          doc.addImage(canvas.toDataURL('image/jpeg', 0.93), 'JPEG', mL, 16, cW, imgH);
+          addWatermark(); addFooter();
+          log(`✓ Mixed-script page ${pn} rendered via canvas`, 'info');
+        } catch(e) {
+          doc.setFontSize(9);
+          doc.setTextColor(180, 60, 60);
+          doc.text(`[Rendering error on page ${pn}]`, mL, mT + 5);
+          addFooter();
+          log(`⚠ Canvas error page ${pn}: ${e.message}`, 'warn');
+        } finally {
+          document.body.removeChild(div);
+        }
+        doc.addPage();
+        continue; // skip native text path for this page
+      }
+
+      // ── Normal LTR path: native jsPDF text ────────────────
       addWatermark();
       doc.setTextColor(txR, txG, txB);
       doc.setFontSize(pdfFontSize);
