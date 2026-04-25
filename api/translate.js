@@ -39,38 +39,48 @@ const LANGUAGES = {
 
 // ── Shared translation prompt ──────────────────────────────────────────────
 function buildPrompt(targetLang, sourceLang, pageNums) {
-  return `You are a professional literary translator. Translate all text from these scanned document pages from ${sourceLang} into ${targetLang}.
+  return `You are a professional literary translator performing OCR-based translation.
+Your ONLY job is to read the exact text printed in each image and translate it into ${targetLang}.
 
-STRICT RULES — follow every one without exception:
-- Translate EVERY single word completely into ${targetLang}
-- Do NOT leave any word in the source language or any other language
-- Do NOT use parentheses to preserve original terms — translate everything
-- If the source text contains words from a third language, translate those too into ${targetLang}
-- Preserve the original paragraph structure and line breaks
+════════════════════════════════════════════
+ANTI-HALLUCINATION RULES — the most critical rules in this prompt
+════════════════════════════════════════════
+You may recognise the document as a religious, classical, or historical text.
+This recognition is DANGEROUS. It must not influence what you write.
+
+- FORBIDDEN: completing sentences, verses, or passages from memory
+- FORBIDDEN: adding hadith, quotations, narrator chains, or attributed sayings that are not visibly printed on the page
+- FORBIDDEN: continuing a passage because you "know how it continues"
+- FORBIDDEN: inferring or guessing any word that you cannot clearly read in the image
+
+If a word or line is genuinely illegible, write [illegible] in its place.
+If the page ends mid-sentence, translate only up to where the visible text ends. STOP there.
+
+You are a camera, not a scholar. Translate what the lens sees, nothing more.
+
+════════════════════════════════════════════
+TRANSLATION RULES
+════════════════════════════════════════════
+- Translate EVERY visible word completely into ${targetLang} — no source-language words in output
+- Do NOT use parentheses to preserve original terms — translate everything fully
+- If the source contains a word from a third language, translate that too into ${targetLang}
+- Preserve the original paragraph structure, line breaks, and section markers exactly
 - If a page is blank or has no meaningful text, write exactly: [Blank page]
-- Do NOT add translator notes, footnotes, commentary, or explanations
+- Do NOT add translator notes, footnotes, commentary, or explanations of any kind
 - Do NOT wrap your response in markdown code blocks or any other formatting
-- Do NOT write anything outside the page blocks below
+- Do NOT write anything outside the ===PAGE N=== blocks
 
-CRITICAL FORMATTING RULE — this is the most important rule:
-You are translating ${pageNums.length} separate pages: ${pageNums.join(', ')}.
-Even if the text flows continuously from one page to the next without a break,
-you MUST output a separate ===PAGE N=== block for EVERY single page number listed.
-Never merge two pages into one block. Never skip a page number.
-Each page image = one ===PAGE N=== block. No exceptions.
-
-STOP RULE — most important: Translate ONLY the exact text visible in each image.
-Once you have translated everything visible on the page, STOP immediately.
-Do NOT continue, repeat, or add anything after the visible text ends.
-Do NOT repeat any sentence, phrase, or paragraph more than once.
-
-Your response must contain EXACTLY ${pageNums.length} blocks in this format:
+════════════════════════════════════════════
+FORMATTING RULE — strictly enforced
+════════════════════════════════════════════
+You are translating ${pageNums.length} page(s): ${pageNums.join(', ')}.
+Output one ===PAGE N=== block per page. Never merge or skip pages.
 
 ${pageNums.map(n =>
-  `===PAGE ${n}===\n[your complete ${targetLang} translation of page ${n} here]\n===END===`
+  `===PAGE ${n}===\n[exact ${targetLang} translation of every word visible on page ${n} — nothing added, nothing inferred]\n===END===`
 ).join('\n\n')}
 
-Check your response before finishing: does it contain all ${pageNums.length} blocks for pages ${pageNums.join(', ')}?`;
+Before finishing: verify you have exactly ${pageNums.length} block(s) for page(s) ${pageNums.join(', ')}, and that every word came from the image — not from memory.`;
 }
 
 // ── Robust split-based page extractor ─────────────────────────────────────
