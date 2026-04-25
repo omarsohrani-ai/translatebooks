@@ -1,0 +1,12 @@
+{
+  "name": "pdf-translator-proxy",
+  "version": "1.0.0",
+  "description": "PDF Translation Service using Google Gemini AI",
+  "main": "api/translate.js",
+  "dependencies": {
+    "@google/generative-ai": "^0.21.0"
+  },
+  "engines": {
+    "node": "18.x"
+  }
+}
