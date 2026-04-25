@@ -1,9 +1,961 @@
-// ── PDF Generation (RTL-aware) ─────────────────────────────────────────────
-// Replace the entire downloadPDF function in your index.html with this.
-// Also add to <head>:
-//   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
-//   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>DocuTranslate — AI Literary Translator</title>
 
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+<style>
+:root {
+  --ink:        #090704;
+  --deep:       #100c07;
+  --card:       #18130d;
+  --card2:      #201810;
+  --card3:      #2a2016;
+  --border:     #3a2e1e;
+  --border2:    #52422a;
+  --gold:       #c49030;
+  --gold2:      #e0b84a;
+  --gold-dim:   #7a5a18;
+  --gold-faint: rgba(196,144,48,0.08);
+  --crimson:    #6e2828;
+  --forest:     #1e4030;
+  --text:       #e4cfa0;
+  --text2:      #c8ab78;
+  --muted:      #7a6040;
+  --white:      #f4e8cc;
+  --success:    #4a8058;
+  --err:        #8a3030;
+  --info:       #365a7a;
+}
+
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  font-family: 'Lora', Georgia, serif;
+  background: var(--deep);
+  color: var(--text);
+  min-height: 100vh;
+  background-image:
+    radial-gradient(ellipse 80% 60% at 15% 0%, rgba(196,144,48,0.04) 0%, transparent 60%),
+    radial-gradient(ellipse 60% 40% at 85% 100%, rgba(110,40,40,0.04) 0%, transparent 60%);
+}
+
+/* ── SCROLLBAR ──────────────────────────────────────────── */
+::-webkit-scrollbar { width: 5px; height: 5px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
+
+/* ── HEADER ─────────────────────────────────────────────── */
+.header {
+  background: linear-gradient(180deg, #0c0906 0%, #12100a 100%);
+  border-bottom: 1px solid var(--border);
+  padding: 0 48px;
+  position: relative;
+  overflow: hidden;
+}
+.header::after {
+  content: '';
+  position: absolute;
+  bottom: 0; left: 0; right: 0;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent 0%,
+    var(--gold-dim) 20%,
+    var(--gold) 50%,
+    var(--gold-dim) 80%,
+    transparent 100%);
+}
+
+.header-inner {
+  max-width: 980px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 26px 0;
+}
+
+.logo-seal {
+  width: 56px;
+  height: 56px;
+  border: 1px solid var(--border2);
+  border-radius: 50%;
+  background: radial-gradient(circle at 40% 35%, var(--card3), var(--card));
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.5em;
+  flex-shrink: 0;
+  position: relative;
+}
+.logo-seal::before {
+  content: '';
+  position: absolute;
+  inset: 3px;
+  border-radius: 50%;
+  border: 1px solid rgba(196,144,48,0.18);
+}
+
+.header-copy h1 {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 2em;
+  font-weight: 600;
+  color: var(--white);
+  letter-spacing: 0.03em;
+  line-height: 1;
+}
+.header-copy h1 span {
+  color: var(--gold);
+  font-style: italic;
+}
+.header-copy p {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 0.95em;
+  color: var(--muted);
+  margin-top: 6px;
+  font-style: italic;
+  letter-spacing: 0.04em;
+}
+.badge {
+  display: inline-block;
+  background: linear-gradient(135deg, var(--gold-dim), #5a4010);
+  border: 1px solid var(--gold-dim);
+  color: var(--gold2);
+  font-family: 'Lora', serif;
+  font-size: 0.42em;
+  font-weight: 400;
+  padding: 3px 10px 2px;
+  border-radius: 20px;
+  margin-left: 10px;
+  vertical-align: middle;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+}
+
+/* ── MAIN LAYOUT ─────────────────────────────────────────── */
+.main {
+  max-width: 980px;
+  margin: 0 auto;
+  padding: 34px 24px 60px;
+}
+.grid2 {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+@media(max-width: 680px) {
+  .grid2 { grid-template-columns: 1fr; }
+  .header { padding: 0 18px; }
+  .header-copy h1 { font-size: 1.5em; }
+  .stats-grid { grid-template-columns: 1fr 1fr; }
+}
+
+/* ── SECTION HEADING ─────────────────────────────────────── */
+.section-rule {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-bottom: 20px;
+  color: var(--gold-dim);
+}
+.section-rule::before, .section-rule::after {
+  content: '';
+  flex: 1;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--border2));
+}
+.section-rule::after {
+  background: linear-gradient(90deg, var(--border2), transparent);
+}
+.section-rule span {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 0.72em;
+  letter-spacing: 0.2em;
+  text-transform: uppercase;
+  white-space: nowrap;
+  color: var(--gold-dim);
+}
+
+/* ── CARDS ───────────────────────────────────────────────── */
+.card {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 24px 26px;
+  margin-bottom: 20px;
+  position: relative;
+  transition: border-color 0.25s;
+}
+.card:hover { border-color: var(--border2); }
+.card::before {
+  content: '';
+  position: absolute;
+  top: 0; left: 20px; right: 20px;
+  height: 1px;
+  background: linear-gradient(90deg,
+    transparent,
+    rgba(196,144,48,0.12),
+    transparent);
+  border-radius: 1px;
+}
+
+.card-title {
+  font-family: 'Cormorant Garamond', Georgia, serif;
+  font-size: 1.1em;
+  font-weight: 600;
+  color: var(--white);
+  margin-bottom: 20px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  letter-spacing: 0.04em;
+}
+.card-title .ti { font-size: 1em; opacity: 0.75; }
+
+/* ── UPLOAD ZONE ─────────────────────────────────────────── */
+.upload-zone {
+  border: 1px dashed var(--border2);
+  border-radius: 10px;
+  padding: 36px 20px;
+  text-align: center;
+  cursor: pointer;
+  transition: all 0.25s;
+  background: rgba(255,255,255,0.01);
+}
+.upload-zone:hover,
+.upload-zone.drag {
+  border-color: var(--gold-dim);
+  background: var(--gold-faint);
+}
+.upload-zone input { display: none; }
+.upload-icon { font-size: 2.4em; margin-bottom: 10px; opacity: 0.65; }
+.upload-zone h3 {
+  font-family: 'Cormorant Garamond', serif;
+  color: var(--white);
+  font-size: 1.1em;
+  font-weight: 500;
+  margin-bottom: 5px;
+}
+.upload-zone p {
+  color: var(--muted);
+  font-size: 0.82em;
+  font-style: italic;
+}
+
+.file-info {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-left: 3px solid var(--gold-dim);
+  border-radius: 8px;
+  padding: 12px 15px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-top: 14px;
+}
+.file-info .fi-icon { font-size: 1.3em; }
+.file-info .fi-name {
+  color: var(--white);
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 0.95em;
+  font-weight: 600;
+}
+.file-info .fi-meta {
+  color: var(--muted);
+  font-size: 0.76em;
+  margin-top: 2px;
+  font-family: 'Lora', serif;
+  font-style: italic;
+}
+
+/* ── FORM ELEMENTS ───────────────────────────────────────── */
+label {
+  display: block;
+  color: var(--muted);
+  font-size: 0.7em;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  font-family: 'Lora', serif;
+  font-style: italic;
+}
+select, input[type=number] {
+  background: var(--card2);
+  color: var(--text);
+  border: 1px solid var(--border);
+  padding: 9px 12px;
+  border-radius: 6px;
+  font-size: 0.88em;
+  font-family: 'Lora', serif;
+  width: 100%;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  appearance: none;
+  -webkit-appearance: none;
+}
+select {
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237a6040'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 32px;
+  cursor: pointer;
+}
+select:focus, input:focus {
+  outline: none;
+  border-color: var(--gold-dim);
+  box-shadow: 0 0 0 2px rgba(196,144,48,0.1);
+}
+.form-group { margin-bottom: 16px; }
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+/* ── BUTTONS ─────────────────────────────────────────────── */
+.btn {
+  border: 1px solid transparent;
+  padding: 11px 22px;
+  border-radius: 6px;
+  font-size: 0.87em;
+  cursor: pointer;
+  font-weight: 500;
+  transition: all 0.18s;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  font-family: 'Lora', serif;
+  font-style: italic;
+  letter-spacing: 0.02em;
+}
+.btn-primary {
+  background: linear-gradient(135deg, #1e4a2e, #153520);
+  color: #7ecf94;
+  border-color: #1e4a2e;
+}
+.btn-primary:hover { background: linear-gradient(135deg, #255a38, #1a4028); }
+.btn-primary:disabled { background: #131e17; color: var(--muted); border-color: var(--border); cursor: not-allowed; }
+
+.btn-gold {
+  background: linear-gradient(135deg, #4a3010, #382208);
+  color: var(--gold2);
+  border-color: var(--gold-dim);
+}
+.btn-gold:hover { background: linear-gradient(135deg, #5a3c14, #48300c); }
+
+.btn-amber {
+  background: linear-gradient(135deg, #4a3018, #382210);
+  color: #d4a060;
+  border-color: #5a3a20;
+}
+.btn-amber:hover { background: linear-gradient(135deg, #5a3c20, #483018); }
+
+.btn-red {
+  background: linear-gradient(135deg, #3a1818, #281010);
+  color: #c07070;
+  border-color: #4a2020;
+}
+.btn-red:hover { background: linear-gradient(135deg, #4a2020, #341414); }
+
+.btn-lg { padding: 13px 30px; font-size: 0.95em; }
+.btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
+
+/* ── STATS ───────────────────────────────────────────────── */
+.stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.stat-box {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 14px 10px;
+  text-align: center;
+}
+.stat-num {
+  font-family: 'Cormorant Garamond', serif;
+  font-size: 1.8em;
+  font-weight: 700;
+  color: var(--gold);
+  line-height: 1;
+  letter-spacing: -0.01em;
+}
+.stat-label {
+  font-size: 0.68em;
+  color: var(--muted);
+  margin-top: 5px;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  font-style: italic;
+}
+
+/* ── PROGRESS ────────────────────────────────────────────── */
+.progress-wrap {
+  background: var(--card2);
+  border-radius: 20px;
+  height: 6px;
+  overflow: hidden;
+  margin: 14px 0 8px;
+  border: 1px solid var(--border);
+}
+.progress-fill {
+  height: 100%;
+  border-radius: 20px;
+  background: linear-gradient(90deg, var(--gold-dim) 0%, var(--gold) 60%, var(--gold2) 100%);
+  transition: width 0.5s ease;
+  box-shadow: 0 0 8px rgba(196,144,48,0.4);
+}
+.progress-label {
+  font-size: 0.8em;
+  color: var(--muted);
+  font-style: italic;
+}
+
+/* ── QUEUE BANNER ────────────────────────────────────────── */
+.queue-banner {
+  background: rgba(196,144,48,0.05);
+  border: 1px solid var(--gold-dim);
+  border-radius: 8px;
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 18px;
+}
+.q-title { color: var(--gold); font-weight: 500; font-size: 0.88em; }
+.q-sub { color: var(--muted); font-size: 0.78em; margin-top: 2px; font-style: italic; }
+.pulse { animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
+
+/* ── LOG BOX ─────────────────────────────────────────────── */
+.log-box {
+  background: #050403;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 12px 14px;
+  max-height: 190px;
+  overflow-y: auto;
+  font-family: 'JetBrains Mono', 'Courier New', monospace;
+  font-size: 0.75em;
+  line-height: 1.65;
+}
+.log-line { padding: 1px 0; }
+.log-line.ok   { color: #5daa72; }
+.log-line.err  { color: #b06060; }
+.log-line.info { color: #5a90b8; }
+.log-line.warn { color: #b89040; }
+.log-line.dim  { color: #4a3c28; }
+
+/* ── PREVIEW BOX ─────────────────────────────────────────── */
+.preview-box {
+  background: var(--card2);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 20px 24px;
+  max-height: 340px;
+  overflow-y: auto;
+  line-height: 1.9;
+  font-family: 'Lora', Georgia, serif;
+  font-size: 0.92em;
+  color: var(--text);
+}
+.preview-page-title {
+  font-family: 'Cormorant Garamond', serif;
+  color: var(--gold);
+  font-size: 0.78em;
+  text-transform: uppercase;
+  letter-spacing: 0.16em;
+  margin: 16px 0 8px;
+  padding-bottom: 6px;
+  border-bottom: 1px solid var(--border);
+  font-weight: 600;
+}
+.preview-page-title:first-child { margin-top: 0; }
+
+/* ── STATUS BANNERS ──────────────────────────────────────── */
+.status-ok {
+  background: rgba(46,100,64,0.14);
+  border: 1px solid rgba(46,100,64,0.4);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 0.84em;
+  color: #82c898;
+  margin-bottom: 16px;
+  font-style: italic;
+}
+.status-err {
+  background: rgba(110,40,40,0.14);
+  border: 1px solid rgba(110,40,40,0.4);
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 0.84em;
+  color: #c07070;
+  margin-bottom: 16px;
+  font-style: italic;
+}
+
+/* ── DIVIDER ─────────────────────────────────────────────── */
+.divider {
+  border: none;
+  border-top: 1px solid var(--border);
+  margin: 20px 0;
+}
+.hidden { display: none !important; }
+
+/* ── FOOTER ──────────────────────────────────────────────── */
+.footer {
+  text-align: center;
+  padding: 24px;
+  color: var(--muted);
+  font-size: 0.8em;
+  font-style: italic;
+  border-top: 1px solid var(--border);
+  background: var(--ink);
+  letter-spacing: 0.03em;
+}
+.footer-ornament {
+  color: var(--gold-dim);
+  margin: 0 10px;
+  font-size: 0.85em;
+}
+</style>
+</head>
+<body>
+
+<!-- ───────────────────────── HEADER ───────────────────────── -->
+<header class="header">
+  <div class="header-inner">
+    <div class="logo-seal">📚</div>
+    <div class="header-copy">
+      <h1>Docu<span>Translate</span> <span class="badge">Free</span></h1>
+      <p>AI-powered literary translation across 40+ languages &mdash; Powered by Google Gemini</p>
+    </div>
+  </div>
+</header>
+
+<!-- ───────────────────────── MAIN ─────────────────────────── -->
+<main class="main">
+
+  <div id="serverStatus"></div>
+
+  <!-- Upload + Settings -->
+  <div class="section-rule"><span>✦ Manuscript &amp; Settings</span></div>
+
+  <div class="grid2">
+
+    <div class="card">
+      <div class="card-title"><span class="ti">📜</span> Upload Manuscript</div>
+      <div class="upload-zone" id="dropZone"
+           onclick="document.getElementById('fileInput').click()">
+        <input type="file" id="fileInput" accept=".pdf">
+        <div class="upload-icon">📖</div>
+        <h3>Drop your PDF here</h3>
+        <p>or click to browse your library</p>
+      </div>
+      <div id="fileInfo" class="hidden"></div>
+    </div>
+
+    <div class="card">
+      <div class="card-title"><span class="ti">🌍</span> Translation Settings</div>
+
+      <div class="form-group">
+        <label>Source Language</label>
+        <select id="sourceLang">
+          <option value="auto">🔍 Auto-detect</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Target Language</label>
+        <select id="targetLang">
+          <option value="en">🇬🇧 English</option>
+        </select>
+      </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label>Start Page</label>
+          <input type="number" id="startPage" value="1" min="1">
+        </div>
+        <div class="form-group">
+          <label>End Page</label>
+          <input type="number" id="endPage" placeholder="All" min="1">
+        </div>
+      </div>
+
+      <div class="form-group">
+        <label>Pages per Batch</label>
+        <select id="batchSize">
+          <option value="2">2 pages &mdash; careful</option>
+          <option value="3" selected>3 pages &mdash; recommended</option>
+          <option value="4">4 pages &mdash; faster</option>
+        </select>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Controls -->
+  <div class="section-rule"><span>✦ Controls</span></div>
+
+  <div class="card">
+    <div class="btn-row">
+      <button class="btn btn-primary btn-lg" id="startBtn"
+              onclick="startTranslation()">▶ Begin Translation</button>
+      <button class="btn btn-amber hidden" id="pauseBtn"
+              onclick="togglePause()">⏸ Pause</button>
+      <button class="btn btn-red hidden" id="stopBtn"
+              onclick="stopTranslation()">⏹ Stop</button>
+      <button class="btn btn-gold hidden" id="downloadBtn"
+              onclick="downloadPDF()">⬇ Download PDF</button>
+    </div>
+  </div>
+
+  <!-- Progress -->
+  <div class="card hidden" id="progressCard">
+    <div class="card-title"><span class="ti">✦</span> Progress</div>
+
+    <div class="queue-banner hidden" id="queueBanner">
+      <span class="pulse" style="font-size:1.3em">⏳</span>
+      <div>
+        <div class="q-title">Awaiting position in the queue&hellip;</div>
+        <div class="q-sub" id="queueInfo">Position: &mdash;</div>
+      </div>
+    </div>
+
+    <div class="stats-grid">
+      <div class="stat-box">
+        <div class="stat-num" id="statDone">0</div>
+        <div class="stat-label">Pages Done</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statTotal">&mdash;</div>
+        <div class="stat-label">Total Pages</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statETA">&mdash;</div>
+        <div class="stat-label">Est. Remaining</div>
+      </div>
+      <div class="stat-box">
+        <div class="stat-num" id="statRate">&mdash;</div>
+        <div class="stat-label">Pages / min</div>
+      </div>
+    </div>
+
+    <div class="progress-wrap">
+      <div class="progress-fill" id="progressBar" style="width:0%"></div>
+    </div>
+    <div class="progress-label" id="progressLabel">Initialising&hellip;</div>
+
+    <hr class="divider">
+    <div class="log-box" id="logBox"></div>
+  </div>
+
+  <!-- Preview -->
+  <div class="card hidden" id="previewCard">
+    <div class="card-title"><span class="ti">📖</span> Live Translation Preview</div>
+    <div class="preview-box" id="previewBox">
+      <em style="color:var(--muted)">Translations will appear here as each passage is rendered&hellip;</em>
+    </div>
+  </div>
+
+</main>
+
+<footer class="footer">
+  DocuTranslate
+  <span class="footer-ornament">❧</span>
+  Powered by Google Gemini AI
+  <span class="footer-ornament">❧</span>
+  AI translations may require editorial review
+</footer>
+
+<!-- ─────────────────────────── SCRIPT ──────────────────────── -->
+<script>
+pdfjsLib.GlobalWorkerOptions.workerSrc =
+  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+// ── State ──────────────────────────────────────────────────────
+let pdfDoc = null, totalPages = 0, translations = {};
+let paused = false, stopped = false, pagesDone = 0, startTime = null;
+const serverUrl = window.location.origin;
+
+const RTL_LANGS = new Set(['ar', 'he', 'fa', 'ur']);
+
+// ── Server init ────────────────────────────────────────────────
+window.addEventListener('load', async () => {
+  try {
+    const r = await fetch(`${serverUrl}/api/translate?action=queue`);
+    if (r.ok) {
+      document.getElementById('serverStatus').innerHTML =
+        '<div class="status-ok">✦ &ensp;Translation server is online and ready</div>';
+      loadLanguages();
+    }
+  } catch(e) {
+    document.getElementById('serverStatus').innerHTML =
+      '<div class="status-err">⚠ &ensp;Translation server is offline — please check your deployment</div>';
+  }
+});
+
+async function loadLanguages() {
+  try {
+    const r = await fetch(`${serverUrl}/api/translate?action=languages`);
+    const data = await r.json();
+    populateLangs(data.languages);
+  } catch(e) {
+    populateLangs(FALLBACK_LANGS);
+  }
+}
+
+const FALLBACK_LANGS = {
+  en:"English", ar:"Arabic", fr:"French", es:"Spanish", de:"German",
+  it:"Italian", pt:"Portuguese", ru:"Russian", zh:"Chinese (Simplified)",
+  ja:"Japanese", ko:"Korean", tr:"Turkish", fa:"Persian (Farsi)",
+  ur:"Urdu", hi:"Hindi", bn:"Bengali", id:"Indonesian", ms:"Malay",
+  nl:"Dutch", pl:"Polish", sv:"Swedish", no:"Norwegian", da:"Danish",
+  fi:"Finnish", cs:"Czech", ro:"Romanian", hu:"Hungarian", el:"Greek",
+  he:"Hebrew", th:"Thai", vi:"Vietnamese", uk:"Ukrainian", bg:"Bulgarian",
+  hr:"Croatian", sk:"Slovak", ca:"Catalan", az:"Azerbaijani",
+  kk:"Kazakh", uz:"Uzbek", sw:"Swahili", am:"Amharic", so:"Somali", ha:"Hausa"
+};
+
+const LANG_FLAGS = {
+  en:"🇬🇧", ar:"🇸🇦", fr:"🇫🇷", es:"🇪🇸", de:"🇩🇪", it:"🇮🇹", pt:"🇵🇹",
+  ru:"🇷🇺", zh:"🇨🇳", ja:"🇯🇵", ko:"🇰🇷", tr:"🇹🇷", fa:"🇮🇷", ur:"🇵🇰",
+  hi:"🇮🇳", bn:"🇧🇩", id:"🇮🇩", ms:"🇲🇾", nl:"🇳🇱", pl:"🇵🇱", sv:"🇸🇪",
+  no:"🇳🇴", da:"🇩🇰", fi:"🇫🇮", cs:"🇨🇿", ro:"🇷🇴", hu:"🇭🇺", el:"🇬🇷",
+  he:"🇮🇱", th:"🇹🇭", vi:"🇻🇳", uk:"🇺🇦", bg:"🇧🇬", hr:"🇭🇷", sk:"🇸🇰",
+  ca:"🏴", az:"🇦🇿", kk:"🇰🇿", uz:"🇺🇿", sw:"🇰🇪", am:"🇪🇹", so:"🇸🇴", ha:"🇳🇬"
+};
+
+function populateLangs(langs) {
+  const src = document.getElementById('sourceLang');
+  const tgt = document.getElementById('targetLang');
+  src.innerHTML = '<option value="auto">🔍 Auto-detect</option>';
+  tgt.innerHTML = '';
+  for (const [code, name] of Object.entries(langs)) {
+    const flag = LANG_FLAGS[code] || '🌐';
+    src.innerHTML += `<option value="${code}">${flag} ${name}</option>`;
+    tgt.innerHTML += `<option value="${code}" ${code==='en'?'selected':''}>${flag} ${name}</option>`;
+  }
+}
+populateLangs(FALLBACK_LANGS);
+
+// ── File Upload ────────────────────────────────────────────────
+const dropZone = document.getElementById('dropZone');
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
+dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
+dropZone.addEventListener('drop', e => {
+  e.preventDefault();
+  dropZone.classList.remove('drag');
+  handleFile(e.dataTransfer.files[0]);
+});
+document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
+
+async function handleFile(file) {
+  if (!file || !file.name.endsWith('.pdf')) { alert('Please select a PDF file.'); return; }
+  const ab = await file.arrayBuffer();
+  pdfDoc = await pdfjsLib.getDocument({ data: ab }).promise;
+  totalPages = pdfDoc.numPages;
+  document.getElementById('endPage').value = totalPages;
+  document.getElementById('endPage').max = totalPages;
+  document.getElementById('startPage').max = totalPages;
+  document.getElementById('statTotal').textContent = totalPages;
+  const fi = document.getElementById('fileInfo');
+  fi.className = 'file-info';
+  fi.innerHTML = `
+    <div class="fi-icon">📄</div>
+    <div>
+      <div class="fi-name">${file.name}</div>
+      <div class="fi-meta">${totalPages} pages &middot; ${(file.size/1024/1024).toFixed(1)} MB</div>
+    </div>`;
+  log(`✓ Loaded: ${file.name} (${totalPages} pages)`, 'ok');
+}
+
+// ── Page Rendering ─────────────────────────────────────────────
+async function renderPage(pageNum) {
+  const page = await pdfDoc.getPage(pageNum);
+  const viewport = page.getViewport({ scale: 1.4 });
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width;
+  canvas.height = viewport.height;
+  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
+  return canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+}
+
+// ── Job Submission & Polling ───────────────────────────────────
+async function submitBatch(images, pageNums, sourceLang, targetLang) {
+  const r = await fetch(`${serverUrl}/api/translate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ images, pageNums, sourceLang, targetLang })
+  });
+  if (!r.ok) throw new Error(`Server error ${r.status}`);
+  return await r.json();
+}
+
+async function pollJob(id) {
+  const qBanner = document.getElementById('queueBanner');
+  while (true) {
+    await new Promise(r => setTimeout(r, 1500));
+    const r = await fetch(`${serverUrl}/api/translate?action=status&id=${id}`);
+    const d = await r.json();
+    if (d.status === 'queued' || d.status === 'processing') {
+      if (d.queuePos > 1) {
+        qBanner.classList.remove('hidden');
+        document.getElementById('queueInfo').textContent =
+          `Position ${d.queuePos} in queue — please wait`;
+      } else {
+        qBanner.classList.add('hidden');
+      }
+      continue;
+    }
+    qBanner.classList.add('hidden');
+    if (d.status === 'done') return d.translations;
+    if (d.status === 'error') throw new Error(d.error);
+  }
+}
+
+// ── Translation Runner ─────────────────────────────────────────
+async function startTranslation() {
+  if (!pdfDoc) { alert('Please upload a PDF first.'); return; }
+
+  const batchSize  = parseInt(document.getElementById('batchSize').value);
+  const startPage  = parseInt(document.getElementById('startPage').value) || 1;
+  const endPage    = parseInt(document.getElementById('endPage').value) || totalPages;
+  const srcLang    = document.getElementById('sourceLang').value;
+  const tgtLang    = document.getElementById('targetLang').value;
+
+  translations = {};
+  pagesDone = 0;
+  paused = false;
+  stopped = false;
+  startTime = Date.now();
+
+  document.getElementById('startBtn').disabled = true;
+  document.getElementById('pauseBtn').classList.remove('hidden');
+  document.getElementById('stopBtn').classList.remove('hidden');
+  document.getElementById('progressCard').classList.remove('hidden');
+  document.getElementById('previewCard').classList.remove('hidden');
+  document.getElementById('statTotal').textContent = endPage - startPage + 1;
+
+  const srcName = document.getElementById('sourceLang')
+    .options[document.getElementById('sourceLang').selectedIndex].text;
+  const tgtName = document.getElementById('targetLang')
+    .options[document.getElementById('targetLang').selectedIndex].text;
+
+  log(`Starting: pages ${startPage}–${endPage} | ${srcName} → ${tgtName} | batch ${batchSize}`, 'info');
+
+  for (let p = startPage; p <= endPage && !stopped; p += batchSize) {
+    while (paused && !stopped) await new Promise(r => setTimeout(r, 500));
+    if (stopped) break;
+
+    const batch = [];
+    for (let j = p; j < Math.min(p + batchSize, endPage + 1); j++) batch.push(j);
+
+    log(`Rendering pages ${batch.join(', ')}…`, 'dim');
+    try {
+      const images = await Promise.all(batch.map(renderPage));
+      log(`Submitting pages ${batch.join(', ')} to server…`, 'info');
+      const job = await submitBatch(images, batch, srcLang, tgtLang);
+      if (job.queuePos > 1) log(`Queued at position ${job.queuePos}. Waiting…`, 'warn');
+      const result = await pollJob(job.id);
+
+      Object.assign(translations, result);
+      pagesDone += batch.length;
+      updateProgress(pagesDone, endPage - startPage + 1);
+      updatePreview(batch, result);
+      log(`✓ Pages ${batch.join(', ')} done`, 'ok');
+    } catch(err) {
+      log(`✗ Error on pages ${batch.join(',')}: ${err.message}`, 'err');
+      log('Retrying in 8 seconds…', 'warn');
+      await new Promise(r => setTimeout(r, 8000));
+      p -= batchSize;
+    }
+  }
+
+  if (!stopped) {
+    log('✅ All pages translated! Generating PDF…', 'ok');
+    document.getElementById('downloadBtn').classList.remove('hidden');
+  }
+  document.getElementById('startBtn').disabled = false;
+  document.getElementById('pauseBtn').classList.add('hidden');
+  document.getElementById('stopBtn').classList.add('hidden');
+  if (!stopped && Object.keys(translations).length > 0) downloadPDF();
+}
+
+function togglePause() {
+  paused = !paused;
+  const btn = document.getElementById('pauseBtn');
+  btn.textContent = paused ? '▶ Resume' : '⏸ Pause';
+  btn.className = paused ? 'btn btn-primary' : 'btn btn-amber';
+  log(paused ? 'Paused.' : 'Resumed.', 'warn');
+}
+
+function stopTranslation() {
+  if (!confirm('Stop translation? Progress so far will still be available to download.')) return;
+  stopped = true;
+  log('Stopped by user. Partial results available below.', 'warn');
+  document.getElementById('downloadBtn').classList.remove('hidden');
+}
+
+// ── UI Helpers ─────────────────────────────────────────────────
+function updateProgress(done, total) {
+  const pct = total > 0 ? (done / total * 100) : 0;
+  document.getElementById('progressBar').style.width = pct.toFixed(1) + '%';
+  document.getElementById('statDone').textContent = done;
+  document.getElementById('progressLabel').textContent =
+    `${done} of ${total} pages translated (${pct.toFixed(1)}%)`;
+  if (startTime && done > 0) {
+    const elapsed = (Date.now() - startTime) / 1000;
+    const rate = done / elapsed * 60;
+    document.getElementById('statRate').textContent = rate.toFixed(1);
+    const rem = (total - done) / (done / elapsed);
+    const m = Math.floor(rem / 60), s = Math.floor(rem % 60);
+    document.getElementById('statETA').textContent = `${m}m ${s}s`;
+  }
+}
+
+function updatePreview(batch, result) {
+  const box = document.getElementById('previewBox');
+  if (box.querySelector('em')) box.innerHTML = '';
+  const tgtCode = document.getElementById('targetLang').value;
+  const isRTL = RTL_LANGS.has(tgtCode);
+
+  for (const pn of batch) {
+    const titleEl = document.createElement('div');
+    titleEl.className = 'preview-page-title';
+    titleEl.textContent = `Page ${pn}`;
+    box.appendChild(titleEl);
+
+    const d = document.createElement('div');
+    const txt = result[pn] || '[Empty]';
+    d.textContent = txt.length > 500 ? txt.substring(0, 500) + '…' : txt;
+    d.style.marginBottom = '14px';
+    if (isRTL) {
+      d.style.direction = 'rtl';
+      d.style.textAlign = 'right';
+      d.style.fontFamily = "'Amiri','Noto Naskh Arabic',serif";
+      d.style.fontSize = '1.06em';
+      d.style.lineHeight = '2.1';
+    }
+    box.appendChild(d);
+  }
+  box.scrollTop = box.scrollHeight;
+}
+
+function log(msg, type = 'dim') {
+  const box = document.getElementById('logBox');
+  const el = document.createElement('div');
+  el.className = `log-line ${type}`;
+  el.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+  box.appendChild(el);
+  box.scrollTop = box.scrollHeight;
+}
+
+// ── PDF Generation (RTL-aware) ─────────────────────────────────
 async function downloadPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
@@ -11,50 +963,87 @@ async function downloadPDF() {
   const cW = W - mL - mR;
 
   const tgtLangCode = document.getElementById('targetLang').value;
-  const tgtName = document.getElementById('targetLang').options[document.getElementById('targetLang').selectedIndex].text;
-  const srcName = document.getElementById('sourceLang').options[document.getElementById('sourceLang').selectedIndex].text;
-
-  // RTL languages that need canvas-based rendering
-  const RTL_LANGS = new Set(['ar', 'he', 'fa', 'ur']);
+  const tgtName = document.getElementById('targetLang')
+    .options[document.getElementById('targetLang').selectedIndex].text;
+  const srcName = document.getElementById('sourceLang')
+    .options[document.getElementById('sourceLang').selectedIndex].text;
   const isRTL = RTL_LANGS.has(tgtLangCode);
 
-  // ── Title page ──
-  doc.setFillColor(13, 17, 23);
-  doc.rect(0, 0, W, H, 'F');
-  doc.setDrawColor(227, 179, 65);
-  doc.setLineWidth(0.4);
-  doc.rect(8, 8, W-16, H-16);
+  log('Composing PDF…', 'info');
 
-  doc.setTextColor(227, 179, 65);
-  doc.setFont('helvetica', 'bold');
-  doc.setFontSize(24);
+  // ── Title page ──────────────────────────────────────────────
+  doc.setFillColor(9, 7, 4);
+  doc.rect(0, 0, W, H, 'F');
+
+  // Double border
+  doc.setDrawColor(122, 90, 24);
+  doc.setLineWidth(0.5);
+  doc.rect(9, 9, W-18, H-18);
+  doc.setLineWidth(0.2);
+  doc.rect(12, 12, W-24, H-24);
+
+  // Title
+  doc.setTextColor(196, 144, 48);
+  doc.setFont('times', 'bolditalic');
+  doc.setFontSize(30);
   doc.text('DocuTranslate', W/2, 60, { align: 'center' });
 
-  doc.setFontSize(16);
-  doc.setTextColor(240, 246, 252);
-  const titleLines = doc.splitTextToSize('AI-Powered Document Translation', cW);
-  doc.text(titleLines, W/2, 80, { align: 'center' });
-
-  doc.setDrawColor(100, 100, 100);
-  doc.line(30, 95, W-30, 95);
-
+  // Subtitle
+  doc.setFont('times', 'italic');
   doc.setFontSize(11);
-  doc.setTextColor(139, 148, 158);
-  doc.setFont('helvetica', 'normal');
-  doc.text(`Source Language: ${srcName}`, W/2, 110, { align: 'center' });
-  doc.text(`Translated to: ${tgtName}`, W/2, 120, { align: 'center' });
-  doc.text(`Pages translated: ${Object.keys(translations).length}`, W/2, 130, { align: 'center' });
-  doc.text(`Generated: ${new Date().toLocaleString()}`, W/2, 140, { align: 'center' });
+  doc.setTextColor(160, 130, 80);
+  doc.text('AI-Powered Literary Translation', W/2, 72, { align: 'center' });
 
-  doc.setFontSize(9);
-  doc.setTextColor(80, 88, 96);
-  doc.text('Powered by Google Gemini AI · DocuTranslate', W/2, H-20, { align: 'center' });
+  // Rules
+  doc.setDrawColor(100, 76, 24);
+  doc.setLineWidth(0.25);
+  doc.line(36, 81, W-36, 81);
+
+  doc.setTextColor(100, 76, 24);
+  doc.setFontSize(14);
+  doc.setFont('times', 'normal');
+  doc.text('✦', W/2, 92, { align: 'center' });
+
+  // Metadata
+  doc.setFont('times', 'normal');
+  doc.setFontSize(10);
+  doc.setTextColor(120, 96, 56);
+  const meta = [
+    `Source Language: ${srcName}`,
+    `Translated into: ${tgtName}`,
+    `Pages translated: ${Object.keys(translations).length}`,
+  ];
+  meta.forEach((line, i) => doc.text(line, W/2, 106 + i * 11, { align: 'center' }));
+
+  doc.line(36, 142, W-36, 142);
+
+  doc.setFontSize(8);
+  doc.setTextColor(80, 64, 40);
+  doc.text(`Generated: ${new Date().toLocaleString()}`, W/2, 152, { align: 'center' });
+
+  doc.setFont('times', 'italic');
+  doc.setFontSize(7.5);
+  doc.text('Powered by Google Gemini AI  ·  DocuTranslate', W/2, H-17, { align: 'center' });
 
   doc.addPage();
 
-  const sorted = Object.keys(translations).map(Number).sort((a,b)=>a-b);
+  const sorted = Object.keys(translations).map(Number).sort((a, b) => a - b);
 
-  // ── RTL path: render via browser → html2canvas → image in PDF ──
+  // Helper: draw page header bar
+  function drawHeader(pageNum, cont = false) {
+    doc.setFillColor(9, 7, 4);
+    doc.rect(0, 0, W, 14, 'F');
+    doc.setDrawColor(122, 90, 24);
+    doc.setLineWidth(0.15);
+    doc.line(0, 14, W, 14);
+    doc.setFontSize(7.5);
+    doc.setFont('times', 'italic');
+    doc.setTextColor(120, 96, 56);
+    doc.text('DocuTranslate', mL, 9);
+    doc.text(`Page ${pageNum}${cont ? ' (cont.)' : ''}  ·  ${tgtName}`, W - mR, 9, { align: 'right' });
+  }
+
+  // ── RTL path: html2canvas ──────────────────────────────────
   if (isRTL) {
     await document.fonts.ready;
 
@@ -62,54 +1051,41 @@ async function downloadPDF() {
       const text = translations[pn] || '';
       const isBlank = !text || text.trim() === '[Blank page]' || text.trim() === '';
 
-      // White page background
-      doc.setFillColor(255, 255, 255);
+      doc.setFillColor(254, 251, 244);
       doc.rect(0, 0, W, H, 'F');
-
-      // Header bar
-      doc.setFillColor(13, 17, 23);
-      doc.rect(0, 0, W, 16, 'F');
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'italic');
-      doc.setTextColor(139, 148, 158);
-      doc.text('DocuTranslate', mL, 10);
-      doc.text(`Page ${pn}  ·  ${tgtName}`, W - mR, 10, { align: 'right' });
+      drawHeader(pn);
 
       if (isBlank) {
         doc.setFontSize(10);
-        doc.setTextColor(180, 180, 180);
-        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(160, 140, 100);
+        doc.setFont('times', 'italic');
         doc.text(`— Page ${pn}: Blank —`, W/2, H/2, { align: 'center' });
         doc.addPage();
         continue;
       }
 
-      // Render RTL text off-screen using browser fonts
-      // Content area dimensions at 2× scale for crisp output
+      // Render RTL text in hidden browser div
       const SCALE = 2;
-      const PX_PER_MM = 96 / 25.4;
-      const divW = Math.round(cW * PX_PER_MM * SCALE);
-      const divH = Math.round((H - 18 - mB) * PX_PER_MM * SCALE);
+      const PX_MM = 96 / 25.4;
+      const divW = Math.round(cW * PX_MM * SCALE);
+      const divH = Math.round((H - 16 - mB) * PX_MM * SCALE);
 
       const div = document.createElement('div');
       div.style.cssText = [
-        `position:fixed`,
-        `top:0`,
-        `left:-99999px`,
-        `width:${divW}px`,
-        `height:${divH}px`,
-        `overflow:hidden`,
-        `background:#ffffff`,
-        `color:#1e1e23`,
-        `font-family:'Amiri','Noto Naskh Arabic','Arial Unicode MS',serif`,
+        'position:fixed', 'top:0', 'left:-99999px',
+        `width:${divW}px`, `height:${divH}px`,
+        'overflow:hidden',
+        'background:#fefbf4',
+        'color:#1c1408',
+        "font-family:'Amiri','Noto Naskh Arabic','Arial Unicode MS',serif",
         `font-size:${Math.round(12 * SCALE)}px`,
-        `line-height:2`,
-        `direction:rtl`,
-        `text-align:justify`,
+        'line-height:2.15',
+        'direction:rtl',
+        'text-align:justify',
         `padding:${Math.round(10 * SCALE)}px ${Math.round(14 * SCALE)}px`,
-        `box-sizing:border-box`,
-        `word-break:break-word`,
-        `white-space:pre-wrap`
+        'box-sizing:border-box',
+        'word-break:break-word',
+        'white-space:pre-wrap'
       ].join(';');
       div.textContent = text;
       document.body.appendChild(div);
@@ -118,21 +1094,19 @@ async function downloadPDF() {
         const canvas = await html2canvas(div, {
           scale: 1,
           useCORS: true,
-          backgroundColor: '#ffffff',
+          backgroundColor: '#fefbf4',
           logging: false,
           width: divW,
           height: divH
         });
-
-        const imgData = canvas.toDataURL('image/jpeg', 0.93);
-        // Place image below the 16mm header bar, respecting bottom margin
-        doc.addImage(imgData, 'JPEG', mL, 18, cW, H - 18 - mB);
+        doc.addImage(canvas.toDataURL('image/jpeg', 0.93),
+          'JPEG', mL, 16, cW, H - 16 - mB);
         log(`✓ RTL page ${pn} rendered`, 'ok');
-      } catch (e) {
+      } catch(e) {
         doc.setFontSize(9);
-        doc.setTextColor(200, 0, 0);
+        doc.setTextColor(160, 60, 60);
         doc.text(`[Rendering error on page ${pn}]`, mL, mT + 5);
-        log(`⚠ Canvas error on page ${pn}: ${e.message}`, 'warn');
+        log(`⚠ Canvas error page ${pn}: ${e.message}`, 'warn');
       } finally {
         document.body.removeChild(div);
       }
@@ -140,56 +1114,43 @@ async function downloadPDF() {
       doc.addPage();
     }
 
-  // ── LTR path: original text-based rendering ──
+  // ── LTR path: native jsPDF text ───────────────────────────
   } else {
     for (const pn of sorted) {
       const text = translations[pn] || '';
       const isBlank = !text || text.trim() === '[Blank page]' || text.trim() === '';
 
-      doc.setFillColor(255, 255, 255);
+      doc.setFillColor(254, 251, 244);
       doc.rect(0, 0, W, H, 'F');
-
-      doc.setFillColor(13, 17, 23);
-      doc.rect(0, 0, W, 16, 'F');
-      doc.setFontSize(8);
-      doc.setFont('helvetica', 'italic');
-      doc.setTextColor(139, 148, 158);
-      doc.text('DocuTranslate', mL, 10);
-      doc.text(`Page ${pn}  ·  ${tgtName}`, W - mR, 10, { align: 'right' });
+      drawHeader(pn);
 
       if (isBlank) {
         doc.setFontSize(10);
-        doc.setTextColor(180, 180, 180);
-        doc.setFont('helvetica', 'italic');
+        doc.setTextColor(160, 140, 100);
+        doc.setFont('times', 'italic');
         doc.text(`— Page ${pn}: Blank —`, W/2, H/2, { align: 'center' });
         doc.addPage();
         continue;
       }
 
-      doc.setTextColor(30, 30, 35);
+      doc.setTextColor(28, 20, 8);
       doc.setFontSize(11);
       doc.setFont('times', 'normal');
 
       const lines = doc.splitTextToSize(text, cW);
-      let y = mT + 5;
-      const lH = 6.2;
+      let y = mT;
+      const lH = 6.4;
 
       for (const line of lines) {
         if (y + lH > H - mB) {
           doc.addPage();
-          doc.setFillColor(255, 255, 255);
+          doc.setFillColor(254, 251, 244);
           doc.rect(0, 0, W, H, 'F');
-          doc.setFillColor(13, 17, 23);
-          doc.rect(0, 0, W, 16, 'F');
-          doc.setFontSize(8);
-          doc.setFont('helvetica', 'italic');
-          doc.setTextColor(139, 148, 158);
-          doc.text('DocuTranslate', mL, 10);
-          doc.text(`Page ${pn} (cont.)  ·  ${tgtName}`, W - mR, 10, { align: 'right' });
-          doc.setTextColor(30, 30, 35);
+          drawHeader(pn, true);
+          doc.setTextColor(28, 20, 8);
           doc.setFontSize(11);
           doc.setFont('times', 'normal');
-          y = mT + 5;
+          y = mT;
         }
         doc.text(line, mL, y);
         y += lH;
@@ -206,3 +1167,6 @@ async function downloadPDF() {
   doc.save(fname);
   log(`✅ Downloaded: ${fname}`, 'ok');
 }
+</script>
+</body>
+</html>
