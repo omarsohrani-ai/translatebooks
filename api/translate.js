@@ -61,6 +61,11 @@ The moment you run out of visible text on the page → STOP. Do not add a single
 If a word is illegible → write [illegible].
 If a line is partially cut off → translate only the visible portion and STOP.
 
+LOOP SELF-CHECK: While writing, if you notice yourself repeating the same sentence
+structure more than twice (e.g. "If X then Y", "If X then Y", "If X then Y"…),
+STOP immediately. You have entered a hallucination loop. Delete the repetitions and end
+the block. Real pages do not contain infinite variations of the same sentence.
+
 ════════════════════════════════════════════
 RULE 2 — TRANSLATION QUALITY
 ════════════════════════════════════════════
@@ -154,7 +159,63 @@ function deduplicateContent(text) {
     }
   }
 
-  return out.join('\n');
+  const joined = out.join('\n');
+  return detectAndTruncateLoop(joined);
+}
+
+// ── Semantic loop detector ─────────────────────────────────────────────────
+// Catches "template repetition" hallucinations: the AI keeps the same sentence
+// structure but swaps one word each iteration (e.g. "If you are X then you will
+// see Y" cycling through synonyms). These don't match as exact duplicates but
+// have very high word-set overlap between consecutive windows of text.
+function detectAndTruncateLoop(text) {
+  const words = text.split(/\s+/).filter(Boolean);
+  if (words.length < 80) return text; // too short to contain a meaningful loop
+
+  const WINDOW = 30; // sliding window size in words
+  const STEP   = Math.max(1, Math.floor(WINDOW / 2));
+
+  for (let i = WINDOW * 2; i <= words.length - WINDOW; i += STEP) {
+    // Build a set of meaningful words (3+ chars) from the previous window
+    const prevSet = new Set(
+      words.slice(i - WINDOW, i)
+           .map(w => w.toLowerCase().replace(/[^a-z]/g, ''))
+           .filter(w => w.length >= 3)
+    );
+    if (prevSet.size === 0) continue;
+
+    // Count how many current-window words are already in the previous window
+    const currWords = words.slice(i, i + WINDOW)
+                           .map(w => w.toLowerCase().replace(/[^a-z]/g, ''))
+                           .filter(w => w.length >= 3);
+    if (currWords.length === 0) continue;
+
+    const overlap = currWords.filter(w => prevSet.has(w)).length / currWords.length;
+
+    if (overlap >= 0.62) {
+      // Step back to find the exact sentence boundary before the loop starts
+      const cutPoint = Math.max(0, i - STEP);
+      let truncated = words.slice(0, cutPoint).join(' ');
+
+      // Trim to the last complete sentence so output doesn't end mid-phrase
+      const lastStop = Math.max(
+        truncated.lastIndexOf('. '),
+        truncated.lastIndexOf('! '),
+        truncated.lastIndexOf('? '),
+        truncated.lastIndexOf('.\n'),
+      );
+      if (lastStop > truncated.length * 0.4) {
+        truncated = truncated.slice(0, lastStop + 1).trim();
+      }
+
+      console.log(
+        `[translate] Semantic loop detected at word ${i} ` +
+        `(${Math.round(overlap * 100)}% overlap) — truncating to ${cutPoint} words`
+      );
+      return truncated;
+    }
+  }
+  return text;
 }
 
 // ── Cross-page / cross-batch deduplication ────────────────────────────────
@@ -216,7 +277,9 @@ async function processWithGemini(job) {
       // Tight token cap per page — prevents hallucination loops on dense/repetitive text.
       // Dense Arabic manuscript page ≈ 300–400 translated words ≈ 400–550 tokens.
       // 800 per page is generous enough for real content, tight enough to cut loops.
-      maxOutputTokens: job.pageNums.length * 800,
+      // 500 tokens/page: enough for dense real content (~350 translated words),
+      // tight enough to hard-cut hallucination loops before they spiral.
+      maxOutputTokens: job.pageNums.length * 500,
       temperature: 0.1
     }
   });
@@ -267,7 +330,7 @@ async function processWithGroq(job) {
     body: JSON.stringify({
       model:      "meta-llama/llama-4-scout-17b-16e-instruct",
       messages:   [{ role: "user", content }],
-      max_tokens: job.pageNums.length * 800,
+      max_tokens: job.pageNums.length * 500,
       temperature: 0.1
     })
   });
