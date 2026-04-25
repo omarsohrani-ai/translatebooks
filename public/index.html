@@ -1,517 +1,22 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DocuTranslate — AI PDF Translator</title>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<style>
-  :root {
-    --bg: #0d1117;
-    --card: #161b22;
-    --card2: #1c2128;
-    --border: #30363d;
-    --accent: #238636;
-    --accent2: #1f6feb;
-    --gold: #e3b341;
-    --red: #da3633;
-    --text: #c9d1d9;
-    --muted: #8b949e;
-    --white: #f0f6fc;
-  }
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--bg); color: var(--text); min-height: 100vh; }
+// ── PDF Generation (RTL-aware) ─────────────────────────────────────────────
+// Replace the entire downloadPDF function in your index.html with this.
+// Also add to <head>:
+//   <link href="https://fonts.googleapis.com/css2?family=Amiri:wght@400;700&display=swap" rel="stylesheet">
+//   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-  /* HEADER */
-  .header { background: linear-gradient(135deg, #0d1117, #161b22); border-bottom: 1px solid var(--border); padding: 20px 40px; display: flex; align-items: center; gap: 20px; }
-  .logo { font-size: 2em; }
-  .header-text h1 { font-size: 1.5em; color: var(--white); font-weight: 700; }
-  .header-text p { color: var(--muted); font-size: 0.85em; margin-top: 3px; }
-  .badge { background: var(--accent); color: white; font-size: 0.7em; padding: 2px 8px; border-radius: 20px; margin-left: 10px; vertical-align: middle; }
-
-  /* LAYOUT */
-  .main { max-width: 960px; margin: 0 auto; padding: 30px 20px; }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-  @media(max-width:640px) { .grid2 { grid-template-columns: 1fr; } .header { padding: 15px 20px; } }
-
-  /* CARDS */
-  .card { background: var(--card); border: 1px solid var(--border); border-radius: 12px; padding: 24px; margin-bottom: 20px; }
-  .card h2 { font-size: 1em; color: var(--white); margin-bottom: 16px; display: flex; align-items: center; gap: 8px; }
-  .card h2 .icon { font-size: 1.2em; }
-
-  /* UPLOAD */
-  .upload-zone { border: 2px dashed var(--border); border-radius: 10px; padding: 40px 20px; text-align: center; cursor: pointer; transition: all 0.2s; }
-  .upload-zone:hover, .upload-zone.drag { border-color: var(--accent2); background: rgba(31,111,235,0.05); }
-  .upload-zone .big-icon { font-size: 2.5em; margin-bottom: 12px; }
-  .upload-zone h3 { color: var(--white); margin-bottom: 6px; }
-  .upload-zone p { color: var(--muted); font-size: 0.85em; }
-  .upload-zone input { display: none; }
-  .file-info { background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; margin-top: 12px; }
-  .file-info .fi-icon { font-size: 1.5em; }
-  .file-info .fi-name { color: var(--white); font-weight: 600; font-size: 0.9em; }
-  .file-info .fi-meta { color: var(--muted); font-size: 0.8em; }
-
-  /* FORM ELEMENTS */
-  select, input[type=number], input[type=text] {
-    background: var(--card2); color: var(--text); border: 1px solid var(--border);
-    padding: 9px 12px; border-radius: 6px; font-size: 0.9em; width: 100%;
-    transition: border-color 0.2s;
-  }
-  select:focus, input:focus { outline: none; border-color: var(--accent2); }
-  label { display: block; color: var(--muted); font-size: 0.82em; margin-bottom: 6px; font-weight: 500; text-transform: uppercase; letter-spacing: 0.5px; }
-  .form-group { margin-bottom: 16px; }
-  .form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
-  /* BUTTONS */
-  .btn { border: none; padding: 11px 24px; border-radius: 6px; font-size: 0.9em; cursor: pointer; font-weight: 600; transition: all 0.15s; display: inline-flex; align-items: center; gap: 6px; }
-  .btn-primary { background: var(--accent); color: white; }
-  .btn-primary:hover { background: #2ea043; }
-  .btn-primary:disabled { background: #1a3a1a; color: var(--muted); cursor: not-allowed; }
-  .btn-blue { background: var(--accent2); color: white; }
-  .btn-blue:hover { background: #388bfd; }
-  .btn-orange { background: #d29922; color: white; }
-  .btn-orange:hover { background: #e3b341; }
-  .btn-red { background: var(--red); color: white; }
-  .btn-red:hover { background: #f85149; }
-  .btn-ghost { background: transparent; color: var(--text); border: 1px solid var(--border); }
-  .btn-ghost:hover { background: var(--card2); }
-  .btn-lg { padding: 13px 30px; font-size: 1em; }
-  .btn-row { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 16px; }
-
-  /* PROGRESS */
-  .stats-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 16px; }
-  @media(max-width:640px) { .stats-grid { grid-template-columns: repeat(2, 1fr); } }
-  .stat-box { background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 14px; text-align: center; }
-  .stat-num { font-size: 1.6em; font-weight: 700; color: var(--gold); }
-  .stat-label { font-size: 0.75em; color: var(--muted); margin-top: 3px; }
-  .progress-wrap { background: var(--card2); border-radius: 20px; height: 10px; overflow: hidden; margin: 12px 0 6px; }
-  .progress-fill { height: 100%; border-radius: 20px; background: linear-gradient(90deg, var(--accent2), var(--accent)); transition: width 0.4s ease; }
-  .progress-label { font-size: 0.82em; color: var(--muted); }
-
-  /* LOG */
-  .log-box { background: #010409; border: 1px solid var(--border); border-radius: 8px; padding: 12px; max-height: 200px; overflow-y: auto; font-family: 'Courier New', monospace; font-size: 0.78em; }
-  .log-line { padding: 2px 0; }
-  .log-line.ok { color: #3fb950; }
-  .log-line.err { color: #f85149; }
-  .log-line.info { color: #58a6ff; }
-  .log-line.warn { color: var(--gold); }
-  .log-line.dim { color: var(--muted); }
-
-  /* QUEUE INDICATOR */
-  .queue-banner { background: linear-gradient(90deg, #1c2128, #1f2937); border: 1px solid var(--gold); border-radius: 8px; padding: 12px 16px; display: flex; align-items: center; gap: 12px; margin-bottom: 16px; }
-  .queue-banner .q-icon { font-size: 1.4em; }
-  .queue-banner .q-text { flex: 1; }
-  .queue-banner .q-title { color: var(--gold); font-weight: 600; font-size: 0.9em; }
-  .queue-banner .q-sub { color: var(--muted); font-size: 0.8em; margin-top: 2px; }
-  .pulse { animation: pulse 2s infinite; }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.5} }
-
-  /* PREVIEW */
-  .preview-box { background: var(--card2); border: 1px solid var(--border); border-radius: 8px; padding: 16px; max-height: 280px; overflow-y: auto; line-height: 1.75; font-size: 0.88em; color: var(--text); }
-  .preview-page-title { color: var(--gold); font-weight: 700; font-size: 0.85em; text-transform: uppercase; letter-spacing: 1px; margin: 12px 0 6px; padding-bottom: 4px; border-bottom: 1px solid var(--border); }
-
-  /* SERVER CONFIG */
-  .server-cfg { background: rgba(31,111,235,0.08); border: 1px solid rgba(31,111,235,0.3); border-radius: 8px; padding: 16px; margin-bottom: 16px; }
-  .server-cfg p { font-size: 0.85em; color: var(--muted); margin-bottom: 10px; }
-  .server-url-row { display: flex; gap: 8px; }
-  .server-url-row input { flex: 1; }
-
-  /* ALERT */
-  .alert { border-radius: 8px; padding: 12px 16px; font-size: 0.85em; margin-bottom: 16px; display: flex; gap: 10px; align-items: flex-start; }
-  .alert-info { background: rgba(31,111,235,0.1); border: 1px solid rgba(31,111,235,0.3); color: #79c0ff; }
-  .alert-success { background: rgba(35,134,54,0.1); border: 1px solid rgba(35,134,54,0.3); color: #3fb950; }
-  .alert-warn { background: rgba(210,153,34,0.1); border: 1px solid rgba(210,153,34,0.3); color: var(--gold); }
-
-  /* STEP BADGES */
-  .step { display: flex; gap: 14px; margin-bottom: 16px; align-items: flex-start; }
-  .step-num { background: var(--accent2); color: white; width: 26px; height: 26px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 0.8em; font-weight: 700; flex-shrink: 0; margin-top: 2px; }
-  .step-body h4 { color: var(--white); font-size: 0.9em; margin-bottom: 3px; }
-  .step-body p { color: var(--muted); font-size: 0.82em; line-height: 1.5; }
-  .step-body code { background: var(--card2); padding: 1px 6px; border-radius: 4px; font-family: monospace; color: var(--gold); font-size: 0.9em; }
-
-  /* HIDDEN */
-  .hidden { display: none !important; }
-  .divider { border: none; border-top: 1px solid var(--border); margin: 20px 0; }
-</style>
-</head>
-<body>
-
-<div class="header">
-  <div class="logo">📄</div>
-  <div class="header-text">
-    <h1>DocuTranslate <span class="badge">FREE</span></h1>
-    <p>AI-powered PDF translator — 40+ languages — Powered by Google Gemini</p>
-  </div>
-</div>
-
-<div class="main">
-
-  <!-- SERVER STATUS (small, unobtrusive) -->
-  <div id="serverStatus" style="margin-bottom:12px;"></div>
-
-  <!-- UPLOAD + SETTINGS -->
-  <div class="grid2">
-    <div class="card">
-      <h2><span class="icon">📂</span> Upload PDF</h2>
-      <div class="upload-zone" id="dropZone" onclick="document.getElementById('fileInput').click()">
-        <input type="file" id="fileInput" accept=".pdf">
-        <div class="big-icon">📄</div>
-        <h3>Drop PDF here</h3>
-        <p>or click to browse</p>
-      </div>
-      <div id="fileInfo" class="hidden"></div>
-    </div>
-
-    <div class="card">
-      <h2><span class="icon">🌍</span> Translation Settings</h2>
-      <div class="form-group">
-        <label>Source Language</label>
-        <select id="sourceLang">
-          <option value="auto">🔍 Auto-detect</option>
-        </select>
-      </div>
-      <div class="form-group">
-        <label>Target Language</label>
-        <select id="targetLang">
-          <option value="en">🇬🇧 English</option>
-        </select>
-      </div>
-      <div class="form-row">
-        <div class="form-group">
-          <label>Start Page</label>
-          <input type="number" id="startPage" value="1" min="1">
-        </div>
-        <div class="form-group">
-          <label>End Page</label>
-          <input type="number" id="endPage" placeholder="All" min="1">
-        </div>
-      </div>
-      <div class="form-group">
-        <label>Pages per Batch</label>
-        <select id="batchSize">
-          <option value="2">2 pages (safer)</option>
-          <option value="3" selected>3 pages (recommended)</option>
-          <option value="4">4 pages (faster)</option>
-        </select>
-      </div>
-    </div>
-  </div>
-
-  <!-- CONTROLS -->
-  <div class="card">
-    <h2><span class="icon">▶️</span> Controls</h2>
-    <div class="btn-row">
-      <button class="btn btn-primary btn-lg" id="startBtn" onclick="startTranslation()">▶ Start Translation</button>
-      <button class="btn btn-orange hidden" id="pauseBtn" onclick="togglePause()">⏸ Pause</button>
-      <button class="btn btn-red hidden" id="stopBtn" onclick="stopTranslation()">⏹ Stop</button>
-      <button class="btn btn-blue hidden" id="downloadBtn" onclick="downloadPDF()">⬇ Download PDF</button>
-    </div>
-  </div>
-
-  <!-- PROGRESS -->
-  <div class="card hidden" id="progressCard">
-    <h2><span class="icon">📊</span> Progress</h2>
-    <div id="queueBanner" class="queue-banner hidden">
-      <div class="q-icon pulse">⏳</div>
-      <div class="q-text">
-        <div class="q-title">Waiting in queue...</div>
-        <div class="q-sub" id="queueInfo">Position: — in queue</div>
-      </div>
-    </div>
-    <div class="stats-grid">
-      <div class="stat-box"><div class="stat-num" id="statDone">0</div><div class="stat-label">Pages Done</div></div>
-      <div class="stat-box"><div class="stat-num" id="statTotal">—</div><div class="stat-label">Total Pages</div></div>
-      <div class="stat-box"><div class="stat-num" id="statETA">—</div><div class="stat-label">Est. Remaining</div></div>
-      <div class="stat-box"><div class="stat-num" id="statRate">—</div><div class="stat-label">Pages/min</div></div>
-    </div>
-    <div class="progress-wrap"><div class="progress-fill" id="progressBar" style="width:0%"></div></div>
-    <div class="progress-label" id="progressLabel">Initializing...</div>
-    <hr class="divider">
-    <div class="log-box" id="logBox"></div>
-  </div>
-
-  <!-- PREVIEW -->
-  <div class="card hidden" id="previewCard">
-    <h2><span class="icon">📖</span> Live Translation Preview</h2>
-    <div class="preview-box" id="previewBox"><em style="color:var(--muted)">Translations will appear here as each batch completes...</em></div>
-  </div>
-
-
-
-</div><!-- end main -->
-
-<script>
-pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-// ── State ──────────────────────────────────────────────
-let pdfDoc = null, totalPages = 0, translations = {}, paused = false, stopped = false;
-let pagesDone = 0, startTime = null;
-
-// Auto-detect server URL (same origin — works perfectly on Vercel)
-const serverUrl = window.location.origin;
-
-// ── Init ───────────────────────────────────────────────
-// Auto-connect on load silently
-window.addEventListener('load', async () => {
-  try {
-    const r = await fetch(`${serverUrl}/api/translate?action=queue`);
-    if (r.ok) {
-      document.getElementById('serverStatus').innerHTML =
-        '<div style="background:rgba(35,134,54,0.15);border:1px solid rgba(35,134,54,0.4);border-radius:8px;padding:8px 14px;font-size:0.82em;color:#3fb950;margin-bottom:4px;">✅ AI Translation Server — Online & Ready</div>';
-      loadLanguages();
-    }
-  } catch(e) {
-    document.getElementById('serverStatus').innerHTML =
-      '<div style="background:rgba(218,54,51,0.1);border:1px solid rgba(218,54,51,0.3);border-radius:8px;padding:8px 14px;font-size:0.82em;color:#f85149;margin-bottom:4px;">⚠️ Server offline — please check your deployment</div>';
-  }
-});
-
-async function loadLanguages() {
-  try {
-    const r = await fetch(`${serverUrl}/api/translate?action=languages`);
-    const data = await r.json();
-    populateLangs(data.languages);
-  } catch(e) {
-    // Use fallback list
-    populateLangs(FALLBACK_LANGS);
-  }
-}
-
-const FALLBACK_LANGS = {
-  en:"English", ar:"Arabic", fr:"French", es:"Spanish", de:"German",
-  it:"Italian", pt:"Portuguese", ru:"Russian", zh:"Chinese (Simplified)",
-  ja:"Japanese", ko:"Korean", tr:"Turkish", fa:"Persian (Farsi)",
-  ur:"Urdu", hi:"Hindi", bn:"Bengali", id:"Indonesian", ms:"Malay",
-  nl:"Dutch", pl:"Polish", sv:"Swedish", no:"Norwegian", da:"Danish",
-  fi:"Finnish", cs:"Czech", ro:"Romanian", hu:"Hungarian", el:"Greek",
-  he:"Hebrew", th:"Thai", vi:"Vietnamese", uk:"Ukrainian", bg:"Bulgarian",
-  hr:"Croatian", sk:"Slovak", ca:"Catalan", az:"Azerbaijani",
-  kk:"Kazakh", uz:"Uzbek", sw:"Swahili", am:"Amharic", so:"Somali", ha:"Hausa"
-};
-
-const LANG_FLAGS = {
-  en:"🇬🇧", ar:"🇸🇦", fr:"🇫🇷", es:"🇪🇸", de:"🇩🇪", it:"🇮🇹", pt:"🇵🇹",
-  ru:"🇷🇺", zh:"🇨🇳", ja:"🇯🇵", ko:"🇰🇷", tr:"🇹🇷", fa:"🇮🇷", ur:"🇵🇰",
-  hi:"🇮🇳", bn:"🇧🇩", id:"🇮🇩", ms:"🇲🇾", nl:"🇳🇱", pl:"🇵🇱", sv:"🇸🇪",
-  no:"🇳🇴", da:"🇩🇰", fi:"🇫🇮", cs:"🇨🇿", ro:"🇷🇴", hu:"🇭🇺", el:"🇬🇷",
-  he:"🇮🇱", th:"🇹🇭", vi:"🇻🇳", uk:"🇺🇦", bg:"🇧🇬", hr:"🇭🇷", sk:"🇸🇰",
-  ca:"🏴", az:"🇦🇿", kk:"🇰🇿", uz:"🇺🇿", sw:"🇰🇪", am:"🇪🇹", so:"🇸🇴", ha:"🇳🇬"
-};
-
-function populateLangs(langs) {
-  const src = document.getElementById('sourceLang');
-  const tgt = document.getElementById('targetLang');
-  src.innerHTML = '<option value="auto">🔍 Auto-detect</option>';
-  tgt.innerHTML = '';
-  for (const [code, name] of Object.entries(langs)) {
-    const flag = LANG_FLAGS[code] || '🌐';
-    src.innerHTML += `<option value="${code}">${flag} ${name}</option>`;
-    tgt.innerHTML += `<option value="${code}" ${code==='en'?'selected':''}>${flag} ${name}</option>`;
-  }
-}
-populateLangs(FALLBACK_LANGS);
-
-
-
-// ── File Upload ────────────────────────────────────────
-const dropZone = document.getElementById('dropZone');
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
-dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.classList.remove('drag'); handleFile(e.dataTransfer.files[0]); });
-document.getElementById('fileInput').addEventListener('change', e => handleFile(e.target.files[0]));
-
-async function handleFile(file) {
-  if (!file || !file.name.endsWith('.pdf')) { alert('Please select a PDF file.'); return; }
-  const ab = await file.arrayBuffer();
-  pdfDoc = await pdfjsLib.getDocument({ data: ab }).promise;
-  totalPages = pdfDoc.numPages;
-  document.getElementById('endPage').value = totalPages;
-  document.getElementById('endPage').max = totalPages;
-  document.getElementById('startPage').max = totalPages;
-  document.getElementById('statTotal').textContent = totalPages;
-  const fi = document.getElementById('fileInfo');
-  fi.className = 'file-info';
-  fi.innerHTML = `<div class="fi-icon">📄</div><div><div class="fi-name">${file.name}</div><div class="fi-meta">${totalPages} pages · ${(file.size/1024/1024).toFixed(1)} MB</div></div>`;
-  log(`✓ Loaded: ${file.name} (${totalPages} pages)`, 'ok');
-}
-
-// ── Page rendering ─────────────────────────────────────
-async function renderPage(pageNum) {
-  const page = await pdfDoc.getPage(pageNum);
-  const viewport = page.getViewport({ scale: 1.4 });
-  const canvas = document.createElement('canvas');
-  canvas.width = viewport.width;
-  canvas.height = viewport.height;
-  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-  return canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
-}
-
-// ── Translation ────────────────────────────────────────
-async function submitBatch(images, pageNums, sourceLang, targetLang) {
-  const r = await fetch(`${serverUrl}/api/translate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ images, pageNums, sourceLang, targetLang })
-  });
-  if (!r.ok) throw new Error(`Server error ${r.status}`);
-  return await r.json(); // { id, status, queuePos }
-}
-
-async function pollJob(id) {
-  const qBanner = document.getElementById('queueBanner');
-  while (true) {
-    await new Promise(r => setTimeout(r, 1500));
-    const r = await fetch(`${serverUrl}/api/translate?action=status&id=${id}`);
-    const d = await r.json();
-    if (d.status === 'queued' || d.status === 'processing') {
-      if (d.queuePos > 1) {
-        qBanner.classList.remove('hidden');
-        document.getElementById('queueInfo').textContent = `Position ${d.queuePos} in queue — please wait`;
-      } else {
-        qBanner.classList.add('hidden');
-      }
-      continue;
-    }
-    qBanner.classList.add('hidden');
-    if (d.status === 'done') return d.translations;
-    if (d.status === 'error') throw new Error(d.error);
-  }
-}
-
-async function startTranslation() {
-  if (!pdfDoc) { alert('Please upload a PDF first.'); return; }
-  if (!serverUrl) { alert('Please configure your server URL first.'); return; }
-
-  const batchSize = parseInt(document.getElementById('batchSize').value);
-  const startPage = parseInt(document.getElementById('startPage').value) || 1;
-  const endPage = parseInt(document.getElementById('endPage').value) || totalPages;
-  const srcLang = document.getElementById('sourceLang').value;
-  const tgtLang = document.getElementById('targetLang').value;
-
-  translations = {};
-  pagesDone = 0;
-  paused = false;
-  stopped = false;
-  startTime = Date.now();
-
-  document.getElementById('startBtn').disabled = true;
-  document.getElementById('pauseBtn').classList.remove('hidden');
-  document.getElementById('stopBtn').classList.remove('hidden');
-  document.getElementById('progressCard').classList.remove('hidden');
-  document.getElementById('previewCard').classList.remove('hidden');
-  document.getElementById('statTotal').textContent = endPage - startPage + 1;
-
-  const srcName = document.getElementById('sourceLang').options[document.getElementById('sourceLang').selectedIndex].text;
-  const tgtName = document.getElementById('targetLang').options[document.getElementById('targetLang').selectedIndex].text;
-  log(`Starting: pages ${startPage}–${endPage} | ${srcName} → ${tgtName} | batch size ${batchSize}`, 'info');
-
-  for (let p = startPage; p <= endPage && !stopped; p += batchSize) {
-    while (paused && !stopped) await new Promise(r => setTimeout(r, 500));
-    if (stopped) break;
-
-    const batch = [];
-    for (let j = p; j < Math.min(p + batchSize, endPage + 1); j++) batch.push(j);
-
-    log(`Rendering pages ${batch.join(', ')}...`, 'dim');
-    try {
-      const images = await Promise.all(batch.map(renderPage));
-      log(`Submitting pages ${batch.join(', ')} to server...`, 'info');
-      const job = await submitBatch(images, batch, srcLang, tgtLang);
-
-      if (job.queuePos > 1) log(`Queued at position ${job.queuePos}. Waiting...`, 'warn');
-      const result = await pollJob(job.id);
-
-      Object.assign(translations, result);
-      pagesDone += batch.length;
-      updateProgress(pagesDone, endPage - startPage + 1);
-      updatePreview(batch, result);
-      log(`✓ Pages ${batch.join(', ')} done`, 'ok');
-    } catch(err) {
-      log(`✗ Error on pages ${batch.join(',')}: ${err.message}`, 'err');
-      log('Retrying in 8 seconds...', 'warn');
-      await new Promise(r => setTimeout(r, 8000));
-      p -= batchSize;
-    }
-  }
-
-  if (!stopped) {
-    log('✅ All pages translated! Generating PDF...', 'ok');
-    document.getElementById('downloadBtn').classList.remove('hidden');
-  }
-  document.getElementById('startBtn').disabled = false;
-  document.getElementById('pauseBtn').classList.add('hidden');
-  document.getElementById('stopBtn').classList.add('hidden');
-  if (!stopped && Object.keys(translations).length > 0) downloadPDF();
-}
-
-function togglePause() {
-  paused = !paused;
-  const btn = document.getElementById('pauseBtn');
-  btn.textContent = paused ? '▶ Resume' : '⏸ Pause';
-  btn.className = paused ? 'btn btn-primary' : 'btn btn-orange';
-  log(paused ? 'Paused.' : 'Resumed.', 'warn');
-}
-
-function stopTranslation() {
-  if (!confirm('Stop translation? Progress so far will still be available to download.')) return;
-  stopped = true;
-  log('Stopped by user. Download partial results below.', 'warn');
-  document.getElementById('downloadBtn').classList.remove('hidden');
-}
-
-// ── UI Helpers ─────────────────────────────────────────
-function updateProgress(done, total) {
-  const pct = total > 0 ? (done / total * 100) : 0;
-  document.getElementById('progressBar').style.width = pct.toFixed(1) + '%';
-  document.getElementById('statDone').textContent = done;
-  document.getElementById('progressLabel').textContent = `${done}/${total} pages (${pct.toFixed(1)}%)`;
-  if (startTime && done > 0) {
-    const elapsed = (Date.now() - startTime) / 1000;
-    const rate = done / elapsed * 60;
-    document.getElementById('statRate').textContent = rate.toFixed(1);
-    const rem = (total - done) / (done / elapsed);
-    const m = Math.floor(rem / 60), s = Math.floor(rem % 60);
-    document.getElementById('statETA').textContent = `${m}m ${s}s`;
-  }
-}
-
-function updatePreview(batch, result) {
-  const box = document.getElementById('previewBox');
-  if (box.querySelector('em')) box.innerHTML = '';
-  for (const pn of batch) {
-    const t = document.createElement('div');
-    t.className = 'preview-page-title';
-    t.textContent = `Page ${pn}`;
-    box.appendChild(t);
-    const d = document.createElement('div');
-    const txt = result[pn] || '[Empty]';
-    d.textContent = txt.length > 400 ? txt.substring(0, 400) + '…' : txt;
-    d.style.marginBottom = '12px';
-    box.appendChild(d);
-  }
-  box.scrollTop = box.scrollHeight;
-}
-
-function log(msg, type = 'dim') {
-  const box = document.getElementById('logBox');
-  const el = document.createElement('div');
-  el.className = `log-line ${type}`;
-  const t = new Date().toLocaleTimeString();
-  el.textContent = `[${t}] ${msg}`;
-  box.appendChild(el);
-  box.scrollTop = box.scrollHeight;
-}
-
-// ── PDF Generation ─────────────────────────────────────
-function downloadPDF() {
+async function downloadPDF() {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
   const W = 210, H = 297, mL = 22, mR = 22, mT = 28, mB = 22;
   const cW = W - mL - mR;
 
+  const tgtLangCode = document.getElementById('targetLang').value;
   const tgtName = document.getElementById('targetLang').options[document.getElementById('targetLang').selectedIndex].text;
   const srcName = document.getElementById('sourceLang').options[document.getElementById('sourceLang').selectedIndex].text;
+
+  // RTL languages that need canvas-based rendering
+  const RTL_LANGS = new Set(['ar', 'he', 'fa', 'ur']);
+  const isRTL = RTL_LANGS.has(tgtLangCode);
 
   // ── Title page ──
   doc.setFillColor(13, 17, 23);
@@ -547,73 +52,157 @@ function downloadPDF() {
 
   doc.addPage();
 
-  // ── Content pages ──
   const sorted = Object.keys(translations).map(Number).sort((a,b)=>a-b);
 
-  for (const pn of sorted) {
-    const text = translations[pn] || '';
-    const isBlank = !text || text.trim() === '[Blank page]' || text.trim() === '';
+  // ── RTL path: render via browser → html2canvas → image in PDF ──
+  if (isRTL) {
+    await document.fonts.ready;
 
-    // White page
-    doc.setFillColor(255, 255, 255);
-    doc.rect(0, 0, W, H, 'F');
+    for (const pn of sorted) {
+      const text = translations[pn] || '';
+      const isBlank = !text || text.trim() === '[Blank page]' || text.trim() === '';
 
-    // Header bar
-    doc.setFillColor(13, 17, 23);
-    doc.rect(0, 0, W, 16, 'F');
-    doc.setFontSize(8);
-    doc.setFont('helvetica', 'italic');
-    doc.setTextColor(139, 148, 158);
-    doc.text('DocuTranslate', mL, 10);
-    doc.text(`Page ${pn}  ·  ${tgtName}`, W - mR, 10, { align: 'right' });
+      // White page background
+      doc.setFillColor(255, 255, 255);
+      doc.rect(0, 0, W, H, 'F');
 
-    if (isBlank) {
-      doc.setFontSize(10);
-      doc.setTextColor(180, 180, 180);
+      // Header bar
+      doc.setFillColor(13, 17, 23);
+      doc.rect(0, 0, W, 16, 'F');
+      doc.setFontSize(8);
       doc.setFont('helvetica', 'italic');
-      doc.text(`— Page ${pn}: Blank —`, W/2, H/2, { align: 'center' });
-      doc.addPage();
-      continue;
-    }
+      doc.setTextColor(139, 148, 158);
+      doc.text('DocuTranslate', mL, 10);
+      doc.text(`Page ${pn}  ·  ${tgtName}`, W - mR, 10, { align: 'right' });
 
-    doc.setTextColor(30, 30, 35);
-    doc.setFontSize(11);
-    doc.setFont('times', 'normal');
-
-    const lines = doc.splitTextToSize(text, cW);
-    let y = mT + 5;
-    const lH = 6.2;
-
-    for (const line of lines) {
-      if (y + lH > H - mB) {
-        doc.addPage();
-        doc.setFillColor(255, 255, 255);
-        doc.rect(0, 0, W, H, 'F');
-        doc.setFillColor(13, 17, 23);
-        doc.rect(0, 0, W, 16, 'F');
-        doc.setFontSize(8);
+      if (isBlank) {
+        doc.setFontSize(10);
+        doc.setTextColor(180, 180, 180);
         doc.setFont('helvetica', 'italic');
-        doc.setTextColor(139, 148, 158);
-        doc.text('DocuTranslate', mL, 10);
-        doc.text(`Page ${pn} (cont.)  ·  ${tgtName}`, W - mR, 10, { align: 'right' });
-        doc.setTextColor(30, 30, 35);
-        doc.setFontSize(11);
-        doc.setFont('times', 'normal');
-        y = mT + 5;
+        doc.text(`— Page ${pn}: Blank —`, W/2, H/2, { align: 'center' });
+        doc.addPage();
+        continue;
       }
-      doc.text(line, mL, y);
-      y += lH;
+
+      // Render RTL text off-screen using browser fonts
+      // Content area dimensions at 2× scale for crisp output
+      const SCALE = 2;
+      const PX_PER_MM = 96 / 25.4;
+      const divW = Math.round(cW * PX_PER_MM * SCALE);
+      const divH = Math.round((H - 18 - mB) * PX_PER_MM * SCALE);
+
+      const div = document.createElement('div');
+      div.style.cssText = [
+        `position:fixed`,
+        `top:0`,
+        `left:-99999px`,
+        `width:${divW}px`,
+        `height:${divH}px`,
+        `overflow:hidden`,
+        `background:#ffffff`,
+        `color:#1e1e23`,
+        `font-family:'Amiri','Noto Naskh Arabic','Arial Unicode MS',serif`,
+        `font-size:${Math.round(12 * SCALE)}px`,
+        `line-height:2`,
+        `direction:rtl`,
+        `text-align:justify`,
+        `padding:${Math.round(10 * SCALE)}px ${Math.round(14 * SCALE)}px`,
+        `box-sizing:border-box`,
+        `word-break:break-word`,
+        `white-space:pre-wrap`
+      ].join(';');
+      div.textContent = text;
+      document.body.appendChild(div);
+
+      try {
+        const canvas = await html2canvas(div, {
+          scale: 1,
+          useCORS: true,
+          backgroundColor: '#ffffff',
+          logging: false,
+          width: divW,
+          height: divH
+        });
+
+        const imgData = canvas.toDataURL('image/jpeg', 0.93);
+        // Place image below the 16mm header bar, respecting bottom margin
+        doc.addImage(imgData, 'JPEG', mL, 18, cW, H - 18 - mB);
+        log(`✓ RTL page ${pn} rendered`, 'ok');
+      } catch (e) {
+        doc.setFontSize(9);
+        doc.setTextColor(200, 0, 0);
+        doc.text(`[Rendering error on page ${pn}]`, mL, mT + 5);
+        log(`⚠ Canvas error on page ${pn}: ${e.message}`, 'warn');
+      } finally {
+        document.body.removeChild(div);
+      }
+
+      doc.addPage();
     }
-    doc.addPage();
+
+  // ── LTR path: original text-based rendering ──
+  } else {
+    for (const pn of sorted) {
+      const text = translations[pn] || '';
+      const isBlank = !text || text.trim() === '[Blank page]' || text.trim() === '';
+
+      doc.setFillColor(255, 255, 255);
+      doc.rect(0, 0, W, H, 'F');
+
+      doc.setFillColor(13, 17, 23);
+      doc.rect(0, 0, W, 16, 'F');
+      doc.setFontSize(8);
+      doc.setFont('helvetica', 'italic');
+      doc.setTextColor(139, 148, 158);
+      doc.text('DocuTranslate', mL, 10);
+      doc.text(`Page ${pn}  ·  ${tgtName}`, W - mR, 10, { align: 'right' });
+
+      if (isBlank) {
+        doc.setFontSize(10);
+        doc.setTextColor(180, 180, 180);
+        doc.setFont('helvetica', 'italic');
+        doc.text(`— Page ${pn}: Blank —`, W/2, H/2, { align: 'center' });
+        doc.addPage();
+        continue;
+      }
+
+      doc.setTextColor(30, 30, 35);
+      doc.setFontSize(11);
+      doc.setFont('times', 'normal');
+
+      const lines = doc.splitTextToSize(text, cW);
+      let y = mT + 5;
+      const lH = 6.2;
+
+      for (const line of lines) {
+        if (y + lH > H - mB) {
+          doc.addPage();
+          doc.setFillColor(255, 255, 255);
+          doc.rect(0, 0, W, H, 'F');
+          doc.setFillColor(13, 17, 23);
+          doc.rect(0, 0, W, 16, 'F');
+          doc.setFontSize(8);
+          doc.setFont('helvetica', 'italic');
+          doc.setTextColor(139, 148, 158);
+          doc.text('DocuTranslate', mL, 10);
+          doc.text(`Page ${pn} (cont.)  ·  ${tgtName}`, W - mR, 10, { align: 'right' });
+          doc.setTextColor(30, 30, 35);
+          doc.setFontSize(11);
+          doc.setFont('times', 'normal');
+          y = mT + 5;
+        }
+        doc.text(line, mL, y);
+        y += lH;
+      }
+
+      doc.addPage();
+    }
   }
 
-  // Remove last blank page
+  // Remove trailing blank page
   if (doc.getNumberOfPages() > 1) doc.deletePage(doc.getNumberOfPages());
 
   const fname = `DocuTranslate_${tgtName}_${new Date().toISOString().slice(0,10)}.pdf`;
   doc.save(fname);
   log(`✅ Downloaded: ${fname}`, 'ok');
 }
-</script>
-</body>
-</html>
