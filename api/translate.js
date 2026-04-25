@@ -28,7 +28,7 @@ const LANGUAGES = {
 async function processJob(job) {
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   // ✅ FIXED: updated from deprecated gemini-1.5-flash to gemini-2.0-flash
-  const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+  const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash-lite" }); //const model = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
 
   const targetLang = LANGUAGES[job.targetLang] || "English";
   const sourceLang = job.sourceLang === "auto" ? "the source language (auto-detect)" : (LANGUAGES[job.sourceLang] || "Arabic");
