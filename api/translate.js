@@ -109,13 +109,20 @@ STRICT RULES — follow every one without exception:
 - Do NOT wrap your response in markdown code blocks or any other formatting
 - Do NOT write anything outside the page blocks below
 
-Format your response EXACTLY as shown — every page must have both delimiters:
+CRITICAL FORMATTING RULE — this is the most important rule:
+You are translating ${job.pageNums.length} separate pages: ${job.pageNums.join(', ')}.
+Even if the text flows continuously from one page to the next without a break,
+you MUST output a separate ===PAGE N=== block for EVERY single page number listed.
+Never merge two pages into one block. Never skip a page number.
+Each page image = one ===PAGE N=== block. No exceptions.
+
+Your response must contain EXACTLY ${job.pageNums.length} blocks in this format:
 
 ${job.pageNums.map(n =>
-  `===PAGE ${n}===\n[your ${targetLang} translation here]\n===END===`
+  `===PAGE ${n}===\n[your complete ${targetLang} translation of page ${n} here]\n===END===`
 ).join('\n\n')}
 
-Translate every page shown above.`
+Check your response before finishing: does it contain all ${job.pageNums.length} blocks for pages ${job.pageNums.join(', ')}?`
   });
 
   const result = await model.generateContent(parts);
