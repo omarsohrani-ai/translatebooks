@@ -220,8 +220,8 @@ function deduplicateContent(text) {
     const trimmed = line.trim();
     if (trimmed.length < 40) return line; // short lines — skip
 
-    // Split on '; ' or '. ' but preserve the separator for reconstruction
-    const parts = trimmed.split(/(?<=\w)(?:; |(?<!\w\.\w)\. )/);
+    // Split on ', ' or '; ' or '. ' to catch comma-chained repetition (e.g. isnad chains)
+    const parts = trimmed.split(/(?<=\w)(?:,\s+|;\s+|(?<!\w\.\w)\.\s+)/);
     if (parts.length < 3) return line;
 
     const seen   = new Map();
@@ -309,9 +309,19 @@ function detectAndRemoveCycles(lines) {
   return output.join('\n');
 }
 
-function isPageGarbage(originalText, dedupedText) {
+// Returns true when a non-RTL output page is still mostly in Arabic/Farsi/Urdu script —
+// meaning Gemini ran out of tokens mid-batch and returned source text untranslated.
+function containsUntranslatedScript(text, targetLang) {
+  if (['ar','fa','ur','he','am'].includes(targetLang)) return false; // RTL target is expected
+  const arabicChars = (text.match(/[\u0600-\u06FF]/g) || []).length;
+  const totalChars  = text.replace(/\s/g, '').length;
+  return totalChars > 30 && arabicChars / totalChars > 0.3; // >30% Arabic in non-Arabic output
+}
+
+function isPageGarbage(originalText, dedupedText, targetLang = 'en') {
   if (!originalText || originalText.startsWith('[Could not extract')) return true;
   if (dedupedText.includes('[⚠')) return true;
+  if (containsUntranslatedScript(dedupedText, targetLang)) return true;
   const origWords  = originalText.split(/\s+/).length;
   const dedupWords = dedupedText.split(/\s+/).length;
   return origWords > 50 && dedupWords < origWords * 0.4;
@@ -441,7 +451,7 @@ async function rescueWithGemini(job, badPages) {
       const raw    = await callGemini(single);
       const parsed = extractPages(raw, [pn]);
       const clean  = deduplicateContent(parsed[pn]);
-      if (!parsed[pn].startsWith('[Could not extract') && !isPageGarbage(parsed[pn], clean)) {
+      if (!parsed[pn].startsWith('[Could not extract') && !isPageGarbage(parsed[pn], clean, job.targetLang)) {
         rescued[pn] = clean;
       }
     } catch (err) {
@@ -469,7 +479,7 @@ async function rescueWithLlama(job, badPages) {
       const raw    = await callLlamaTranslate(single);
       const parsed = extractPages(raw, [pn]);
       const clean  = deduplicateContent(parsed[pn]);
-      if (!isPageGarbage(parsed[pn], clean)) rescued[pn] = clean;
+      if (!isPageGarbage(parsed[pn], clean, job.targetLang)) rescued[pn] = clean;
     } catch (_) { /* skip */ }
   }
   return rescued;
@@ -603,7 +613,7 @@ async function processJob(job) {
     const original = parsed[pn];
     const clean    = original.startsWith('[Could not extract') ? original : deduplicateContent(original);
     deduped[pn]    = clean;
-    if (isPageGarbage(original, clean)) badPages.push(pn);
+    if (isPageGarbage(original, clean, job.targetLang)) badPages.push(pn);
   }
 
   let usedProvider = primaryName;
