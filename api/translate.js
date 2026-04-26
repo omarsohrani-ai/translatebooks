@@ -208,14 +208,14 @@ function extractPages(raw, pageNums) {
 
 // ─── Quality detection: cycles + frequency + length ──────────────────────
 function deduplicateContent(text) {
-  // Pass 0: within-line repetition (semicolon/comma separated fragments)
-  // Catches: "do not be against him; do not be against him; do not be against him"
-  // Strategy: split each line by [;.] and apply the same frequency cap within the line.
+  // Pass 0: within-line repetition (comma/semicolon/period separated fragments)
+  // Catches: "and has made them aware...; and has made them aware...; ..."
+  // Also catches comma-chained isnad repetition (e.g. "and his grandfather, and his grandfather,...")
   text = text.split('\n').map(line => {
     const trimmed = line.trim();
     if (trimmed.length < 40) return line; // short lines — skip
 
-    // Split on '; ' or '. ' but preserve the separator for reconstruction
+    // Split on ', ' or '; ' or '. ' to catch comma-chained repetition
     const parts = trimmed.split(/(?<=\w)(?:,\s+|;\s+|(?<!\w\.\w)\.\s+)/);
     if (parts.length < 3) return line;
 
@@ -233,6 +233,14 @@ function deduplicateContent(text) {
     if (removed === 0) return line;
     return kept.join('; ') + (removed > 0 ? ' [⚠ within-line repetition removed]' : '');
   }).join('\n');
+
+  // Pass 3 (word cap) runs BEFORE the line-count early exit.
+  // A single-line "and ... and ... and ..." loop has lines.length=1 and bypasses
+  // Passes 1+2 entirely — but it can still be thousands of words. Catch it here first.
+  const rawWords = text.split(/\s+/).length;
+  if (rawWords > 600) {
+    return text.split(/\s+/).slice(0, 500).join(' ') + '\n[⚠ Output truncated — possible hallucination]';
+  }
 
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   if (lines.length < 4) return text;
@@ -252,7 +260,7 @@ function deduplicateContent(text) {
   // Pass 2: cycle detection
   const result = detectAndRemoveCycles(pass1);
 
-  // Pass 3: hard word cap
+  // Pass 3 (post-dedup word cap): catches cases where dedup still left too much
   const words = result.split(/\s+/).length;
   if (words > 600) {
     return result.split(/\s+/).slice(0, 500).join(' ') + '\n[⚠ Output truncated — possible hallucination]';
@@ -326,11 +334,7 @@ async function callGemini(job) {
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash-lite",
     generationConfig: {
-      // thinkingBudget: 0 — disables reasoning tokens on gemini-2.5-flash-lite.
-      // Without this, the model can spend the entire maxOutputTokens budget on its
-      // think chain and return an empty translation, causing blank pages.
       thinkingConfig:  { thinkingBudget: 0 },
-      // Minimum 1200 tokens per page so single-page rescues have enough headroom.
       maxOutputTokens: Math.max(1200, job.pageNums.length * 800),
       temperature: 0.1
     }
@@ -351,8 +355,6 @@ async function callGemini(job) {
   const result = await model.generateContent(parts);
   const raw    = result.response.text();
 
-  // Belt-and-suspenders: strip any think blocks Gemini may still emit
-  // (e.g. if thinkingBudget is ignored on a future model version).
   const text = raw
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<think>[\s\S]*/gi, '')
@@ -446,7 +448,6 @@ async function callGroqAPI(modelId, content, maxTokens, systemPrompt = null) {
   const data = await response.json();
   const raw  = data.choices?.[0]?.message?.content || "";
 
-  // Strip think blocks at source — covers pipeline rescue path which bypasses extractPages()
   return raw
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<think>[\s\S]*/gi, '')
