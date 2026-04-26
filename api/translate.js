@@ -184,8 +184,10 @@ TRANSLATION:`;
 function extractPages(raw, pageNums) {
   let text = raw
     .replace(/^```[\w]*\n?/m, '').replace(/\n?```\s*$/m, '')
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')
-    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')       // closed think block
+    .replace(/<think>[\s\S]*/gi, '')                  // unclosed think block (token cutoff mid-think)
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')  // closed thinking block
+    .replace(/<thinking>[\s\S]*/gi, '');              // unclosed thinking block
 
   text = text
     .replace(/===\s*PAGE\s+(\d+)\s*===/gi, (_, n) => `\n===PAGE ${n}===\n`)
@@ -405,11 +407,21 @@ async function callQwen3Translate(sourceLang, targetLang, extractedText) {
     ? "the source language (auto-detect)"
     : (LANGUAGES[sourceLang] || "the source language");
 
+  // Estimate output tokens: source word count × ~1.5 expansion, minimum 1500
+  const estTokens = Math.max(1500, Math.ceil(extractedText.split(/\s+/).length * 1.5));
   const content = [{ type: "text", text: buildTextTranslatePrompt(tgt, src, extractedText) }];
-  return callGroqAPI("qwen/qwen3-32b", content, 1500);
+
+  // /no_think disables Qwen3's chain-of-thought reasoning — without it the model
+  // emits a large <think> block that eats into the token budget and may be
+  // truncated mid-block, leaving the raw thinking text in the output.
+  return callGroqAPI("qwen/qwen3-32b", content, estTokens, "/no_think");
 }
 
-async function callGroqAPI(modelId, content, maxTokens) {
+async function callGroqAPI(modelId, content, maxTokens, systemPrompt = null) {
+  const messages = systemPrompt
+    ? [{ role: "system", content: systemPrompt }, { role: "user", content }]
+    : [{ role: "user", content }];
+
   const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method:  "POST",
     headers: {
@@ -418,7 +430,7 @@ async function callGroqAPI(modelId, content, maxTokens) {
     },
     body: JSON.stringify({
       model:             modelId,
-      messages:          [{ role: "user", content }],
+      messages,
       max_tokens:        maxTokens,
       temperature:       0.15,
       frequency_penalty: 0.3
