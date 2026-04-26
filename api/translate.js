@@ -314,10 +314,10 @@ function detectAndRemoveCycles(lines) {
 // Returns true when a non-RTL output page is still mostly in Arabic/Farsi/Urdu script —
 // meaning Gemini ran out of tokens mid-batch and returned source text untranslated.
 function containsUntranslatedScript(text, targetLang) {
-  if (['ar','fa','ur','he','am'].includes(targetLang)) return false; // RTL target is expected
+  if (['ar','fa','ur','he','am'].includes(targetLang)) return false;
   const arabicChars = (text.match(/[\u0600-\u06FF]/g) || []).length;
   const totalChars  = text.replace(/\s/g, '').length;
-  return totalChars > 30 && arabicChars / totalChars > 0.3; // >30% Arabic in non-Arabic output
+  return totalChars > 30 && arabicChars / totalChars > 0.3;
 }
 
 function isPageGarbage(originalText, dedupedText, targetLang = 'en') {
@@ -407,13 +407,8 @@ async function callQwen3Translate(sourceLang, targetLang, extractedText) {
     ? "the source language (auto-detect)"
     : (LANGUAGES[sourceLang] || "the source language");
 
-  // Estimate output tokens: source word count × ~1.5 expansion, minimum 1500
   const estTokens = Math.max(1500, Math.ceil(extractedText.split(/\s+/).length * 1.5));
   const content = [{ type: "text", text: buildTextTranslatePrompt(tgt, src, extractedText) }];
-
-  // /no_think disables Qwen3's chain-of-thought reasoning — without it the model
-  // emits a large <think> block that eats into the token budget and may be
-  // truncated mid-block, leaving the raw thinking text in the output.
   return callGroqAPI("qwen/qwen3-32b", content, estTokens, "/no_think");
 }
 
@@ -444,7 +439,16 @@ async function callGroqAPI(modelId, content, maxTokens, systemPrompt = null) {
   }
 
   const data = await response.json();
-  return data.choices?.[0]?.message?.content || "";
+  const raw  = data.choices?.[0]?.message?.content || "";
+
+  // Strip think blocks at the source — closed, unclosed, and empty shells.
+  // Handles the pipeline rescue path which doesn't go through extractPages().
+  return raw
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think>[\s\S]*/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<thinking>[\s\S]*/gi, '')
+    .trim();
 }
 
 // ─── Per-page Gemini rescue ───────────────────────────────────────────────
