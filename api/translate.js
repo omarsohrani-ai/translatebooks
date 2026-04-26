@@ -58,47 +58,26 @@ const KNOWN_HARD_SCRIPTS = new Set(['ar', 'fa', 'ur', 'he', 'am', 'th']);
 // data instead of reading the actual page. Detection across multiple religious
 // and classical traditions, not Arabic-specific.
 const HALLUCINATION_SIGNATURES = [
-  // Islamic / classical Arabic markers
   /peace be upon (him|her|them)/gi,
   /\b(may|the) (god|allah) (be pleased|forgive|bless|the almighty)/gi,
   /it (was|is) narrated (by|that|from)/gi,
-
-  // Prophet/Messenger mentions — broadened to catch fiqh fabrication.
-  // Old pattern required "of god/allah/peace" — missed "The Prophet said/performed/wiped".
-  // New pattern fires on any sentence where "The Prophet" or "The Messenger" appears,
-  // whether followed by said/performed/wiped/ordered/replied or anything else.
   /\bthe (prophet|messenger)\b/gi,
-
   /\b(hadith|quran|qur'an|allah|sunnah|sahaba)\b/gi,
   /\b(sahih|tafsir|fiqh|sharia|ulema)\b/gi,
-  /\bibn\s+[A-Z][a-z]+/g,  // "ibn Arabi", "ibn Sina" etc.
-
-  // Islamic jurisprudence / ritual terms — absent from the old list.
-  // Llama fabricates fiqh content that never mentions "Prophet of Allah" explicitly
-  // but is saturated with these ritual terms instead.
+  /\bibn\s+[A-Z][a-z]+/g,
   /\b(wudu|tayammum|ablution|ghusl|janabah|hadath|najasa)\b/gi,
   /\b(salah|salat|namaaz|zakat|sawm|hajj|fatwa|ijtihad)\b/gi,
   /\b(companions of the prophet|the (companions|sahaba) (said|performed|did))\b/gi,
   /the scholars (have )?(differed|agreed|said|mentioned) regarding/gi,
-
-  // Sufi / Ibn Arabi specific patterns (the chapter naming style)
   /chapter on .{1,40}translation/gi,
   /book of (translations|biographies|exhortations|indications|sayings)/gi,
   /\b(a hint|an indication|a fine point|a subtlety|a nice saying)\s*[-:—]/gi,
-
-  // Buddhist markers
   /\b(buddha said|the dharma|sutra|bodhisattva|sangha|nirvana)\b/gi,
   /\b(zen master|mahayana|theravada)\b/gi,
-
-  // Hindu / Sanskrit markers
   /\b(bhagavan|krishna said|veda|upanishad|purana|shloka|verse said)\b/gi,
   /\b(arjuna|guru|swami|brahman|atman)\b/gi,
-
-  // Jewish / Hebrew markers
   /\b(torah|talmud|midrash|rabbi|halakha|kabbalah)\b/gi,
   /\bblessed be he\b/gi,
-
-  // Christian medieval / patristic markers
   /\b(saint augustine|aquinas|patristic|epistle of)\b/gi,
 ];
 
@@ -198,10 +177,10 @@ TRANSLATION:`;
 function extractPages(raw, pageNums) {
   let text = raw
     .replace(/^```[\w]*\n?/m, '').replace(/\n?```\s*$/m, '')
-    .replace(/<think>[\s\S]*?<\/think>/gi, '')       // closed think block
-    .replace(/<think>[\s\S]*/gi, '')                  // unclosed think block (token cutoff mid-think)
-    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')  // closed thinking block
-    .replace(/<thinking>[\s\S]*/gi, '');              // unclosed thinking block
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think>[\s\S]*/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<thinking>[\s\S]*/gi, '');
 
   text = text
     .replace(/===\s*PAGE\s+(\d+)\s*===/gi, (_, n) => `\n===PAGE ${n}===\n`)
@@ -236,7 +215,7 @@ function deduplicateContent(text) {
     const trimmed = line.trim();
     if (trimmed.length < 40) return line; // short lines — skip
 
-    // Split on ', ' or '; ' or '. ' to catch comma-chained repetition (e.g. isnad chains)
+    // Split on '; ' or '. ' but preserve the separator for reconstruction
     const parts = trimmed.split(/(?<=\w)(?:,\s+|;\s+|(?<!\w\.\w)\.\s+)/);
     if (parts.length < 3) return line;
 
@@ -347,7 +326,12 @@ async function callGemini(job) {
   const model = genAI.getGenerativeModel({
     model: "gemini-2.5-flash-lite",
     generationConfig: {
-      maxOutputTokens: job.pageNums.length * 800,
+      // thinkingBudget: 0 — disables reasoning tokens on gemini-2.5-flash-lite.
+      // Without this, the model can spend the entire maxOutputTokens budget on its
+      // think chain and return an empty translation, causing blank pages.
+      thinkingConfig:  { thinkingBudget: 0 },
+      // Minimum 1200 tokens per page so single-page rescues have enough headroom.
+      maxOutputTokens: Math.max(1200, job.pageNums.length * 800),
       temperature: 0.1
     }
   });
@@ -365,10 +349,19 @@ async function callGemini(job) {
   parts.push({ text: buildTranslatePrompt(targetLang, sourceLang, job.pageNums, false) });
 
   const result = await model.generateContent(parts);
-  const text   = result.response.text();
+  const raw    = result.response.text();
 
-  if (!text || text.trim().length < 5) {
-    throw new Error('RECITATION: Gemini returned empty (silent safety filter)');
+  // Belt-and-suspenders: strip any think blocks Gemini may still emit
+  // (e.g. if thinkingBudget is ignored on a future model version).
+  const text = raw
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<think>[\s\S]*/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '')
+    .replace(/<thinking>[\s\S]*/gi, '')
+    .trim();
+
+  if (!text || text.length < 5) {
+    throw new Error('RECITATION: Gemini returned empty (silent safety filter or thinking-only response)');
   }
   return text;
 }
