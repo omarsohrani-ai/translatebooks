@@ -1,1800 +1,762 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>DocuTranslate — AI Literary Translator</title>
-
-<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,400;0,500;0,600;0,700;1,400;1,600&family=Lora:ital,wght@0,400;0,500;1,400&family=JetBrains+Mono:wght@400;500&family=Noto+Nastaliq+Urdu:wght@400;700&display=swap" rel="stylesheet">
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
-
-<style>
-:root {
-  --ink:        #090704;
-  --deep:       #100c07;
-  --card:       #18130d;
-  --card2:      #201810;
-  --card3:      #2a2016;
-  --border:     #3a2e1e;
-  --border2:    #52422a;
-  --gold:       #c49030;
-  --gold2:      #e0b84a;
-  --gold-dim:   #7a5a18;
-  --gold-faint: rgba(196,144,48,0.08);
-  --crimson:    #6e2828;
-  --forest:     #1e4030;
-  --text:       #e4cfa0;
-  --text2:      #c8ab78;
-  --muted:      #7a6040;
-  --white:      #f4e8cc;
-  --success:    #4a8058;
-  --err:        #8a3030;
-  --info:       #365a7a;
-}
-
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-
-body {
-  font-family: 'Lora', Georgia, serif;
-  background: var(--deep);
-  color: var(--text);
-  min-height: 100vh;
-  background-image:
-    radial-gradient(ellipse 80% 60% at 15% 0%, rgba(196,144,48,0.04) 0%, transparent 60%),
-    radial-gradient(ellipse 60% 40% at 85% 100%, rgba(110,40,40,0.04) 0%, transparent 60%);
-}
-
-/* ── SCROLLBAR ──────────────────────────────────────────── */
-::-webkit-scrollbar { width: 5px; height: 5px; }
-::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: var(--border2); border-radius: 3px; }
-
-/* ── HEADER ─────────────────────────────────────────────── */
-.header {
-  background: linear-gradient(180deg, #0c0906 0%, #12100a 100%);
-  border-bottom: 1px solid var(--border);
-  padding: 0 48px;
-  position: relative;
-  overflow: hidden;
-}
-.header::after {
-  content: '';
-  position: absolute;
-  bottom: 0; left: 0; right: 0;
-  height: 1px;
-  background: linear-gradient(90deg,
-    transparent 0%,
-    var(--gold-dim) 20%,
-    var(--gold) 50%,
-    var(--gold-dim) 80%,
-    transparent 100%);
-}
-
-.header-inner {
-  max-width: 980px;
-  margin: 0 auto;
-  display: flex;
-  align-items: center;
-  gap: 22px;
-  padding: 26px 0;
-}
-
-.logo-seal {
-  width: 56px;
-  height: 56px;
-  border: 1px solid var(--border2);
-  border-radius: 50%;
-  background: radial-gradient(circle at 40% 35%, var(--card3), var(--card));
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 1.5em;
-  flex-shrink: 0;
-  position: relative;
-}
-.logo-seal::before {
-  content: '';
-  position: absolute;
-  inset: 3px;
-  border-radius: 50%;
-  border: 1px solid rgba(196,144,48,0.18);
-}
-
-.header-copy h1 {
-  font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: 2em;
-  font-weight: 600;
-  color: var(--white);
-  letter-spacing: 0.03em;
-  line-height: 1;
-}
-.header-copy h1 span {
-  color: var(--gold);
-  font-style: italic;
-}
-.header-copy p {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 0.95em;
-  color: var(--muted);
-  margin-top: 6px;
-  font-style: italic;
-  letter-spacing: 0.04em;
-}
-.badge {
-  display: inline-block;
-  background: linear-gradient(135deg, var(--gold-dim), #5a4010);
-  border: 1px solid var(--gold-dim);
-  color: var(--gold2);
-  font-family: 'Lora', serif;
-  font-size: 0.42em;
-  font-weight: 400;
-  padding: 3px 10px 2px;
-  border-radius: 20px;
-  margin-left: 10px;
-  vertical-align: middle;
-  letter-spacing: 0.12em;
-  text-transform: uppercase;
-}
-
-/* ── MAIN LAYOUT ─────────────────────────────────────────── */
-.main {
-  max-width: 980px;
-  margin: 0 auto;
-  padding: 34px 24px 60px;
-}
-.grid2 {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-@media(max-width: 680px) {
-  .grid2 { grid-template-columns: 1fr; }
-  .header { padding: 0 18px; }
-  .header-copy h1 { font-size: 1.5em; }
-  .stats-grid { grid-template-columns: 1fr 1fr; }
-}
-
-/* ── SECTION HEADING ─────────────────────────────────────── */
-.section-rule {
-  display: flex;
-  align-items: center;
-  gap: 14px;
-  margin-bottom: 20px;
-  color: var(--gold-dim);
-}
-.section-rule::before, .section-rule::after {
-  content: '';
-  flex: 1;
-  height: 1px;
-  background: linear-gradient(90deg, transparent, var(--border2));
-}
-.section-rule::after {
-  background: linear-gradient(90deg, var(--border2), transparent);
-}
-.section-rule span {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 0.72em;
-  letter-spacing: 0.2em;
-  text-transform: uppercase;
-  white-space: nowrap;
-  color: var(--gold-dim);
-}
-
-/* ── CARDS ───────────────────────────────────────────────── */
-.card {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 24px 26px;
-  margin-bottom: 20px;
-  position: relative;
-  transition: border-color 0.25s;
-}
-.card:hover { border-color: var(--border2); }
-.card::before {
-  content: '';
-  position: absolute;
-  top: 0; left: 20px; right: 20px;
-  height: 1px;
-  background: linear-gradient(90deg,
-    transparent,
-    rgba(196,144,48,0.12),
-    transparent);
-  border-radius: 1px;
-}
-
-.card-title {
-  font-family: 'Cormorant Garamond', Georgia, serif;
-  font-size: 1.1em;
-  font-weight: 600;
-  color: var(--white);
-  margin-bottom: 20px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  letter-spacing: 0.04em;
-}
-.card-title .ti { font-size: 1em; opacity: 0.75; }
-
-/* ── UPLOAD ZONE ─────────────────────────────────────────── */
-.upload-zone {
-  border: 1px dashed var(--border2);
-  border-radius: 10px;
-  padding: 36px 20px;
-  text-align: center;
-  cursor: pointer;
-  transition: all 0.25s;
-  background: rgba(255,255,255,0.01);
-}
-.upload-zone:hover,
-.upload-zone.drag {
-  border-color: var(--gold-dim);
-  background: var(--gold-faint);
-}
-.upload-zone input { display: none; }
-.upload-icon { font-size: 2.4em; margin-bottom: 10px; opacity: 0.65; }
-.upload-zone h3 {
-  font-family: 'Cormorant Garamond', serif;
-  color: var(--white);
-  font-size: 1.1em;
-  font-weight: 500;
-  margin-bottom: 5px;
-}
-.upload-zone p {
-  color: var(--muted);
-  font-size: 0.82em;
-  font-style: italic;
-}
-
-.file-info {
-  background: var(--card2);
-  border: 1px solid var(--border);
-  border-left: 3px solid var(--gold-dim);
-  border-radius: 8px;
-  padding: 12px 15px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-top: 14px;
-}
-.file-info .fi-icon { font-size: 1.3em; }
-.file-info .fi-name {
-  color: var(--white);
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 0.95em;
-  font-weight: 600;
-}
-.file-info .fi-meta {
-  color: var(--muted);
-  font-size: 0.76em;
-  margin-top: 2px;
-  font-family: 'Lora', serif;
-  font-style: italic;
-}
-
-/* ── FORM ELEMENTS ───────────────────────────────────────── */
-label {
-  display: block;
-  color: var(--muted);
-  font-size: 0.7em;
-  margin-bottom: 6px;
-  text-transform: uppercase;
-  letter-spacing: 0.1em;
-  font-family: 'Lora', serif;
-  font-style: italic;
-}
-select, input[type=number] {
-  background: var(--card2);
-  color: var(--text);
-  border: 1px solid var(--border);
-  padding: 9px 12px;
-  border-radius: 6px;
-  font-size: 0.88em;
-  font-family: 'Lora', serif;
-  width: 100%;
-  transition: border-color 0.2s, box-shadow 0.2s;
-  appearance: none;
-  -webkit-appearance: none;
-}
-select {
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6'%3E%3Cpath d='M0 0l5 6 5-6z' fill='%237a6040'/%3E%3C/svg%3E");
-  background-repeat: no-repeat;
-  background-position: right 12px center;
-  padding-right: 32px;
-  cursor: pointer;
-}
-select:focus, input:focus {
-  outline: none;
-  border-color: var(--gold-dim);
-  box-shadow: 0 0 0 2px rgba(196,144,48,0.1);
-}
-.form-group { margin-bottom: 16px; }
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-
-/* ── BUTTONS ─────────────────────────────────────────────── */
-.btn {
-  border: 1px solid transparent;
-  padding: 11px 22px;
-  border-radius: 6px;
-  font-size: 0.87em;
-  cursor: pointer;
-  font-weight: 500;
-  transition: all 0.18s;
-  display: inline-flex;
-  align-items: center;
-  gap: 7px;
-  font-family: 'Lora', serif;
-  font-style: italic;
-  letter-spacing: 0.02em;
-}
-.btn-primary {
-  background: linear-gradient(135deg, #1e4a2e, #153520);
-  color: #7ecf94;
-  border-color: #1e4a2e;
-}
-.btn-primary:hover { background: linear-gradient(135deg, #255a38, #1a4028); }
-.btn-primary:disabled { background: #131e17; color: var(--muted); border-color: var(--border); cursor: not-allowed; }
-
-.btn-gold {
-  background: linear-gradient(135deg, #4a3010, #382208);
-  color: var(--gold2);
-  border-color: var(--gold-dim);
-}
-.btn-gold:hover { background: linear-gradient(135deg, #5a3c14, #48300c); }
-
-.btn-amber {
-  background: linear-gradient(135deg, #4a3018, #382210);
-  color: #d4a060;
-  border-color: #5a3a20;
-}
-.btn-amber:hover { background: linear-gradient(135deg, #5a3c20, #483018); }
-
-.btn-red {
-  background: linear-gradient(135deg, #3a1818, #281010);
-  color: #c07070;
-  border-color: #4a2020;
-}
-.btn-red:hover { background: linear-gradient(135deg, #4a2020, #341414); }
-
-.btn-lg { padding: 13px 30px; font-size: 0.95em; }
-.btn-row { display: flex; gap: 10px; flex-wrap: wrap; align-items: center; }
-
-/* ── STATS ───────────────────────────────────────────────── */
-.stats-grid {
-  display: grid;
-  grid-template-columns: repeat(4, 1fr);
-  gap: 12px;
-  margin-bottom: 18px;
-}
-.stat-box {
-  background: var(--card2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 14px 10px;
-  text-align: center;
-}
-.stat-num {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 1.8em;
-  font-weight: 700;
-  color: var(--gold);
-  line-height: 1;
-  letter-spacing: -0.01em;
-}
-.stat-label {
-  font-size: 0.68em;
-  color: var(--muted);
-  margin-top: 5px;
-  letter-spacing: 0.08em;
-  text-transform: uppercase;
-  font-style: italic;
-}
-
-/* ── PROGRESS ────────────────────────────────────────────── */
-.progress-wrap {
-  background: var(--card2);
-  border-radius: 20px;
-  height: 6px;
-  overflow: hidden;
-  margin: 14px 0 8px;
-  border: 1px solid var(--border);
-}
-.progress-fill {
-  height: 100%;
-  border-radius: 20px;
-  background: linear-gradient(90deg, var(--gold-dim) 0%, var(--gold) 60%, var(--gold2) 100%);
-  transition: width 0.5s ease;
-  box-shadow: 0 0 8px rgba(196,144,48,0.4);
-}
-.progress-label {
-  font-size: 0.8em;
-  color: var(--muted);
-  font-style: italic;
-}
-
-/* ── QUEUE BANNER ────────────────────────────────────────── */
-.queue-banner {
-  background: rgba(196,144,48,0.05);
-  border: 1px solid var(--gold-dim);
-  border-radius: 8px;
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 18px;
-}
-.q-title { color: var(--gold); font-weight: 500; font-size: 0.88em; }
-.q-sub { color: var(--muted); font-size: 0.78em; margin-top: 2px; font-style: italic; }
-.pulse { animation: pulse 2s ease-in-out infinite; }
-@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.35} }
-
-/* ── LOG BOX ─────────────────────────────────────────────── */
-.log-box {
-  background: #050403;
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 12px 14px;
-  max-height: 190px;
-  overflow-y: auto;
-  font-family: 'JetBrains Mono', 'Courier New', monospace;
-  font-size: 0.75em;
-  line-height: 1.65;
-}
-.log-line { padding: 1px 0; }
-.log-line.ok   { color: #5daa72; }
-.log-line.err  { color: #b06060; }
-.log-line.info { color: #5a90b8; }
-.log-line.warn { color: #b89040; }
-.log-line.dim  { color: #4a3c28; }
-
-/* ── PREVIEW BOX ─────────────────────────────────────────── */
-.preview-box {
-  background: var(--card2);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 20px 24px;
-  max-height: 340px;
-  overflow-y: auto;
-  line-height: 1.9;
-  font-family: 'Lora', Georgia, serif;
-  font-size: 0.92em;
-  color: var(--text);
-}
-.preview-page-title {
-  font-family: 'Cormorant Garamond', serif;
-  color: var(--gold);
-  font-size: 0.78em;
-  text-transform: uppercase;
-  letter-spacing: 0.16em;
-  margin: 16px 0 8px;
-  padding-bottom: 6px;
-  border-bottom: 1px solid var(--border);
-  font-weight: 600;
-}
-.preview-page-title:first-child { margin-top: 0; }
-
-/* ── STATUS BANNERS ──────────────────────────────────────── */
-.status-ok {
-  background: rgba(46,100,64,0.14);
-  border: 1px solid rgba(46,100,64,0.4);
-  border-radius: 8px;
-  padding: 10px 18px;
-  font-size: 0.84em;
-  color: #82c898;
-  margin-bottom: 16px;
-  font-style: italic;
-}
-.status-err {
-  background: rgba(110,40,40,0.14);
-  border: 1px solid rgba(110,40,40,0.4);
-  border-radius: 8px;
-  padding: 10px 18px;
-  font-size: 0.84em;
-  color: #c07070;
-  margin-bottom: 16px;
-  font-style: italic;
-}
-
-/* ── DIVIDER ─────────────────────────────────────────────── */
-.divider {
-  border: none;
-  border-top: 1px solid var(--border);
-  margin: 20px 0;
-}
-.hidden { display: none !important; }
-
-/* ── FOOTER ──────────────────────────────────────────────── */
-.footer {
-  text-align: center;
-  padding: 24px;
-  color: var(--muted);
-  font-size: 0.8em;
-  font-style: italic;
-  border-top: 1px solid var(--border);
-  background: var(--ink);
-  letter-spacing: 0.03em;
-}
-.footer-ornament {
-  color: var(--gold-dim);
-  margin: 0 10px;
-  font-size: 0.85em;
-}
-/* ── THEME SWATCHES ──────────────────────────────────────── */
-.theme-group-label {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 0.78em;
-  color: var(--muted);
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  margin-bottom: 8px;
-  font-weight: 600;
-}
-.theme-grid {
-  display: grid;
-  grid-template-columns: repeat(5, 1fr);
-  gap: 8px;
-  margin-bottom: 14px;
-}
-@media(max-width:500px) { .theme-grid { grid-template-columns: repeat(5,1fr); } }
-.theme-swatch {
-  cursor: pointer;
-  border-radius: 8px;
-  border: 2px solid transparent;
-  padding: 10px 4px 8px;
-  text-align: center;
-  transition: all 0.2s;
-  background: var(--card2);
-}
-.theme-swatch:hover { border-color: var(--border2); transform: translateY(-1px); }
-.theme-swatch.active { border-color: var(--gold); }
-.swatch-dot {
-  width: 34px; height: 34px;
-  border-radius: 50%;
-  margin: 0 auto 7px;
-  border: 2px solid rgba(128,100,60,0.2);
-  display: flex; align-items: center; justify-content: center;
-  font-size: 0.55em; font-weight: 700;
-  letter-spacing: 0.05em;
-}
-.swatch-name {
-  font-size: 0.67em; color: var(--muted);
-  font-style: italic; line-height: 1.3;
-  font-family: 'Lora', serif;
-}
-.theme-swatch.active .swatch-name { color: var(--gold); }
-
-/* ── THEME PREVIEW STRIP ─────────────────────────────────── */
-.theme-preview {
-  border-radius: 8px;
-  padding: 14px 18px;
-  margin: 12px 0;
-  border: 1px solid var(--border);
-  transition: all 0.3s;
-  font-family: 'Lora', Georgia, serif;
-}
-.theme-preview-title {
-  font-family: 'Cormorant Garamond', serif;
-  font-size: 0.85em;
-  text-transform: uppercase;
-  letter-spacing: 0.12em;
-  margin-bottom: 6px;
-  font-weight: 600;
-}
-.theme-preview-body { font-size: 0.88em; line-height: 1.8; }
-
-/* ── TYPO OPTIONS ────────────────────────────────────────── */
-.typo-row { display: flex; gap: 6px; flex-wrap: wrap; }
-.typo-btn {
-  background: var(--card2);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  padding: 6px 14px;
-  color: var(--muted);
-  cursor: pointer;
-  font-family: 'Lora', serif;
-  font-size: 0.8em;
-  font-style: italic;
-  transition: all 0.15s;
-}
-.typo-btn:hover { border-color: var(--border2); color: var(--text); }
-.typo-btn.active { border-color: var(--gold-dim); color: var(--gold); background: var(--card3); }
-</style>
-</head>
-<body>
-
-<!-- ───────────────────────── HEADER ───────────────────────── -->
-<header class="header">
-  <div class="header-inner">
-    <div class="logo-seal">📚</div>
-    <div class="header-copy">
-      <h1>Docu<span>Translate</span> <span class="badge">Free</span></h1>
-      <p>AI-powered literary translation across 40+ languages &mdash; Powered by Google Gemini</p>
-    </div>
-  </div>
-</header>
-
-<!-- ───────────────────────── MAIN ─────────────────────────── -->
-<main class="main">
-
-  <div id="serverStatus"></div>
-
-  <!-- Upload + Settings -->
-  <div class="section-rule"><span>✦ Manuscript &amp; Settings</span></div>
-
-  <div class="grid2">
-
-    <div class="card">
-      <div class="card-title"><span class="ti">📜</span> Upload Manuscript</div>
-      <div class="upload-zone" id="dropZone"
-           onclick="document.getElementById('fileInput').click()">
-        <input type="file" id="fileInput"
-               accept=".pdf,image/jpeg,image/jpg,image/png,image/webp,image/tiff,image/bmp"
-               multiple>
-        <div class="upload-icon">📖</div>
-        <h3>Drop PDF or images here</h3>
-        <p>PDF &nbsp;·&nbsp; JPG &nbsp;·&nbsp; PNG &nbsp;·&nbsp; WEBP &nbsp;·&nbsp; TIFF</p>
-        <p style="margin-top:4px;font-size:0.75em">Multiple images = multiple pages</p>
-      </div>
-      <div id="fileInfo" class="hidden"></div>
-    </div>
-
-    <div class="card">
-      <div class="card-title"><span class="ti">🌍</span> Translation Settings</div>
-
-      <div class="form-group">
-        <label>Source Language</label>
-        <select id="sourceLang">
-          <option value="auto">🔍 Auto-detect</option>
-        </select>
-      </div>
-
-      <div class="form-group">
-        <label>Target Language</label>
-        <select id="targetLang">
-          <option value="en">🇬🇧 English</option>
-        </select>
-      </div>
-
-      <div class="form-row">
-        <div class="form-group">
-          <label>Start Page</label>
-          <input type="number" id="startPage" value="1" min="1" oninput="updateEstimate()">
-        </div>
-        <div class="form-group">
-          <label>End Page</label>
-          <input type="number" id="endPage" placeholder="All" min="1" oninput="updateEstimate()">
-        </div>
-      </div>
-
-      <div class="form-group">
-        <label>Pages per Batch</label>
-        <select id="batchSize" onchange="updateEstimate()">
-          <option value="2">2 pages &mdash; careful</option>
-          <option value="3" selected>3 pages &mdash; recommended</option>
-          <option value="4">4 pages &mdash; faster</option>
-        </select>
-      </div>
-
-      <!-- Live estimate strip -->
-      <div id="estimateStrip" class="hidden" style="
-        background:var(--card3);border:1px solid var(--border);
-        border-radius:6px;padding:10px 14px;font-size:0.8em;
-        font-family:'Lora',serif;font-style:italic;color:var(--muted);
-        line-height:1.7;margin-top:4px;">
-      </div>
-    </div>
-
-  </div>
-
-  <!-- Free Tier Guide -->
-  <div class="section-rule"><span>✦ Free Tier Guide</span></div>
-
-  <div class="card" id="freeTierCard">
-    <div style="display:flex;align-items:center;justify-content:space-between;cursor:pointer;user-select:none"
-         onclick="toggleGuide()">
-      <div class="card-title" style="margin-bottom:0">
-        <span class="ti">📋</span> How to get the most out of the free tier
-      </div>
-      <span id="guideChevron" style="color:var(--gold-dim);font-size:1.1em;transition:transform 0.25s">▼</span>
-    </div>
-
-    <div id="guideBody" style="display:none;margin-top:20px">
-
-      <!-- Quick-reference grid -->
-      <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-bottom:20px">
-        <div class="stat-box">
-          <div class="stat-num">1,000</div>
-          <div class="stat-label">Free requests / day</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-num">15</div>
-          <div class="stat-label">Requests / minute</div>
-        </div>
-        <div class="stat-box">
-          <div class="stat-num">~3K</div>
-          <div class="stat-label">Free pages / day</div>
-        </div>
-      </div>
-
-      <!-- Page calculator -->
-      <div style="background:var(--card2);border:1px solid var(--border);border-radius:8px;padding:16px 18px;margin-bottom:18px">
-        <div style="font-family:'Cormorant Garamond',serif;font-size:1em;color:var(--white);margin-bottom:12px;font-weight:600">
-          📐 Request Calculator
-        </div>
-        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-          <div style="flex:1;min-width:120px">
-            <label style="margin-bottom:4px">Book page count</label>
-            <input type="number" id="calcPages" value="100" min="1" max="2000"
-                   oninput="updateCalc()" style="width:100%">
-          </div>
-          <div style="flex:1;min-width:120px">
-            <label style="margin-bottom:4px">Batch size</label>
-            <select id="calcBatch" onchange="updateCalc()" style="width:100%">
-              <option value="2">2 pages</option>
-              <option value="3" selected>3 pages</option>
-              <option value="4">4 pages</option>
-            </select>
-          </div>
-        </div>
-        <div id="calcResult" style="
-          margin-top:14px;background:var(--card3);border-radius:6px;
-          padding:12px 14px;font-family:'Lora',serif;font-size:0.84em;
-          font-style:italic;color:var(--text);line-height:1.9;
-          border-left:3px solid var(--gold-dim)">
-        </div>
-      </div>
-
-      <!-- Tips list -->
-      <div style="font-family:'Lora',serif;font-size:0.88em;line-height:2;color:var(--text2)">
-        <div style="font-family:'Cormorant Garamond',serif;font-size:1em;color:var(--white);margin-bottom:10px;font-weight:600">
-          ✦ Best practices
-        </div>
-
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px 24px">
-          <div>
-            <span style="color:var(--gold)">Use batch size 3</span><br>
-            Best balance of speed and reliability. Batch 4 risks hitting
-            the 6,000-token-per-minute input ceiling on dense pages.
-          </div>
-          <div>
-            <span style="color:var(--gold)">Translate in chapters</span><br>
-            Use Start/End page to translate 50–80 pages at a time.
-            Pause between sessions to conserve daily quota.
-          </div>
-          <div>
-            <span style="color:var(--gold)">Quota resets at midnight PT</span><br>
-            Pacific Time (UTC-7/8). Plan heavy jobs for just after midnight
-            to get a full fresh 1,000 requests (flash-lite) or 20 (flash).
-          </div>
-          <div>
-            <span style="color:var(--gold)">Two speed modes</span><br>
-            <b style="color:var(--white)">Flash-lite</b> (active): 1,000 RPD — translate a full 400-page book in one session.
-            <b style="color:var(--white)">Flash</b>: only 20 RPD free but richer literary output — enable billing for ~$0.20/book.
-          </div>
-          <div>
-            <span style="color:var(--gold)">Stop &amp; download anytime</span><br>
-            Hit Stop and download a partial PDF. Come back and
-            set Start Page to where you left off — no progress is lost.
-          </div>
-          <div>
-            <span style="color:var(--gold)">Enable billing for $0</span><br>
-            Adding a card at <a href="https://aistudio.google.com" target="_blank"
-            style="color:var(--gold-dim)">aistudio.google.com</a> unlocks Tier 1
-            (higher limits) with no charge unless you exceed free amounts.
-          </div>
-        </div>
-
-        <div style="margin-top:16px;background:rgba(196,144,48,0.06);border:1px solid var(--gold-dim);
-             border-radius:6px;padding:10px 14px;color:var(--muted);font-size:0.85em">
-          ⚠ Free tier data may be used by Google to improve their models.
-          For private or sensitive documents, enable billing to opt out.
-        </div>
-      </div>
-    </div>
-  </div>
-
-  <!-- PDF Export Style -->
-  <div class="section-rule"><span>✦ PDF Export Style</span></div>
-
-  <div class="card">
-    <div class="card-title"><span class="ti">🎨</span> Reading Theme &amp; Typography</div>
-
-    <div class="theme-group-label">Gentle Light</div>
-    <div class="theme-grid" id="lightSwatches"></div>
-
-    <div class="theme-group-label">Easy Dark</div>
-    <div class="theme-grid" id="darkSwatches"></div>
-
-    <div class="theme-preview" id="themePreview">
-      <div class="theme-preview-title" id="previewTitle">Parchment</div>
-      <div class="theme-preview-body" id="previewBody">
-        The translated text will appear like this in your PDF — this sample
-        shows the contrast, warmth, and overall reading comfort of the
-        selected theme.
-      </div>
-    </div>
-
-    <hr class="divider" style="margin:16px 0">
-
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px">
-      <div>
-        <div class="theme-group-label" style="margin-bottom:8px">Font Size</div>
-        <div class="typo-row" id="fontSizeBtns">
-          <button class="typo-btn" onclick="setFontSize(9)">Small</button>
-          <button class="typo-btn active" onclick="setFontSize(11)">Normal</button>
-          <button class="typo-btn" onclick="setFontSize(13)">Large</button>
-          <button class="typo-btn" onclick="setFontSize(15)">X-Large</button>
-        </div>
-      </div>
-      <div>
-        <div class="theme-group-label" style="margin-bottom:8px">Line Spacing</div>
-        <div class="typo-row" id="spacingBtns">
-          <button class="typo-btn" onclick="setSpacing(1.5)">Compact</button>
-          <button class="typo-btn active" onclick="setSpacing(1.8)">Normal</button>
-          <button class="typo-btn" onclick="setSpacing(2.2)">Airy</button>
-        </div>
-      </div>
-    </div>
-
-    <div style="margin-top:16px">
-      <div class="theme-group-label" style="margin-bottom:8px">Page Margins</div>
-      <div class="typo-row" id="marginBtns">
-        <button class="typo-btn" onclick="setMargin(15)">Narrow</button>
-        <button class="typo-btn active" onclick="setMargin(22)">Normal</button>
-        <button class="typo-btn" onclick="setMargin(30)">Wide</button>
-        <button class="typo-btn" onclick="setMargin(38)">Book-style</button>
-      </div>
-    </div>
-  </div>
-
-  <div class="section-rule"><span>✦ Controls</span></div>
-
-  <div class="card">
-    <div class="btn-row">
-      <button class="btn btn-primary btn-lg" id="startBtn"
-              onclick="startTranslation()">▶ Begin Translation</button>
-      <button class="btn btn-amber hidden" id="pauseBtn"
-              onclick="togglePause()">⏸ Pause</button>
-      <button class="btn btn-red hidden" id="stopBtn"
-              onclick="stopTranslation()">⏹ Stop</button>
-      <button class="btn btn-gold hidden" id="downloadBtn"
-              onclick="downloadPDF()">⬇ Download PDF</button>
-    </div>
-  </div>
-
-  <!-- Progress -->
-  <div class="card hidden" id="progressCard">
-    <div class="card-title"><span class="ti">✦</span> Progress</div>
-
-    <div class="queue-banner hidden" id="queueBanner">
-      <span class="pulse" style="font-size:1.3em">⏳</span>
-      <div>
-        <div class="q-title">Awaiting position in the queue&hellip;</div>
-        <div class="q-sub" id="queueInfo">Position: &mdash;</div>
-      </div>
-    </div>
-
-    <div class="stats-grid">
-      <div class="stat-box">
-        <div class="stat-num" id="statDone">0</div>
-        <div class="stat-label">Pages Done</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num" id="statTotal">&mdash;</div>
-        <div class="stat-label">Total Pages</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num" id="statETA">&mdash;</div>
-        <div class="stat-label">Est. Remaining</div>
-      </div>
-      <div class="stat-box">
-        <div class="stat-num" id="statRate">&mdash;</div>
-        <div class="stat-label">Pages / min</div>
-      </div>
-    </div>
-
-    <div class="progress-wrap">
-      <div class="progress-fill" id="progressBar" style="width:0%"></div>
-    </div>
-    <div class="progress-label" id="progressLabel">Initialising&hellip;</div>
-
-    <hr class="divider">
-    <div class="log-box" id="logBox"></div>
-  </div>
-
-  <!-- Preview -->
-  <div class="card hidden" id="previewCard">
-    <div class="card-title"><span class="ti">📖</span> Live Translation Preview</div>
-    <div class="preview-box" id="previewBox">
-      <em style="color:var(--muted)">Translations will appear here as each passage is rendered&hellip;</em>
-    </div>
-  </div>
-
-</main>
-
-<footer class="footer">
-  DocuTranslate
-  <span class="footer-ornament">❧</span>
-  Powered by Google Gemini AI
-  <span class="footer-ornament">❧</span>
-  <a href="https://translatebooks.vercel.app" target="_blank"
-     style="color:var(--gold-dim);text-decoration:none;letter-spacing:0.04em">
-    translatebooks.vercel.app
-  </a>
-  <span class="footer-ornament">❧</span>
-  <a href="https://ko-fi.com/translatebooks" target="_blank"
-     style="display:inline-flex;align-items:center;gap:6px;
-            background:linear-gradient(135deg,#4a3010,#382208);
-            border:1px solid var(--gold-dim);border-radius:20px;
-            color:var(--gold2);text-decoration:none;
-            padding:5px 14px;font-size:0.9em;font-style:normal;
-            letter-spacing:0.04em;transition:all 0.2s"
-     onmouseover="this.style.background='linear-gradient(135deg,#5a3c14,#48300c)'"
-     onmouseout="this.style.background='linear-gradient(135deg,#4a3010,#382208)'">
-    ☕ Buy me a coffee
-  </a>
-</footer>
-
-<!-- ─────────────────────────── SCRIPT ──────────────────────── -->
-<script>
-pdfjsLib.GlobalWorkerOptions.workerSrc =
-  'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
-
-// ── State ──────────────────────────────────────────────────────
-let pdfDoc = null, totalPages = 0, translations = {};
-let paused = false, stopped = false, pagesDone = 0, startTime = null;
-let imageFiles = [];   // populated when user uploads image files instead of PDF
-let fileMode   = 'pdf'; // 'pdf' | 'images'
-const serverUrl = window.location.origin;
-
-const RTL_LANGS = new Set(['ar', 'he', 'fa', 'ur']);
-
-// ── PDF Theme System ───────────────────────────────────────────
-const PDF_THEMES = {
-  // ── Light themes ──
-  parchment: {
-    name:'Parchment', group:'light', emoji:'📜',
-    bg:'#fefbf4', text:'#1c1408', headerBg:'#090704',
-    headerText:'#786040', accent:'#c49030',
-    rtlLineH: 2.6, desc:'Warm & classic'
-  },
-  white: {
-    name:'Paper White', group:'light', emoji:'📄',
-    bg:'#ffffff', text:'#1a1a1a', headerBg:'#1a1a1a',
-    headerText:'#888888', accent:'#444444',
-    rtlLineH: 2.4, desc:'Clean & crisp'
-  },
-  cream: {
-    name:'Warm Cream', group:'light', emoji:'🍦',
-    bg:'#fdf6e3', text:'#2d2006', headerBg:'#2d2006',
-    headerText:'#8a7040', accent:'#8a6d3b',
-    rtlLineH: 2.5, desc:'Soft on eyes'
-  },
-  sepia: {
-    name:'Sepia', group:'light', emoji:'📷',
-    bg:'#f4e4c1', text:'#2d1b00', headerBg:'#2d1b00',
-    headerText:'#8b6240', accent:'#8b4513',
-    rtlLineH: 2.5, desc:'Vintage feel'
-  },
-  rose: {
-    name:'Soft Rose', group:'light', emoji:'🌸',
-    bg:'#fdf0f0', text:'#2d0f0f', headerBg:'#2d0f0f',
-    headerText:'#8b5050', accent:'#8b3a3a',
-    rtlLineH: 2.4, desc:'Gentle tint'
-  },
-  // ── Dark themes ──
-  night: {
-    name:'Night', group:'dark', emoji:'🌙',
-    bg:'#1a1a1a', text:'#e0e0e0', headerBg:'#0d0d0d',
-    headerText:'#888888', accent:'#c49030',
-    rtlLineH: 2.6, desc:'Pure dark'
-  },
-  warmNight: {
-    name:'Warm Night', group:'dark', emoji:'🕯️',
-    bg:'#1c1710', text:'#e4cfa0', headerBg:'#090704',
-    headerText:'#786040', accent:'#c49030',
-    rtlLineH: 2.6, desc:'Amber glow'
-  },
-  solarized: {
-    name:'Solarized', group:'dark', emoji:'🌊',
-    bg:'#002b36', text:'#93a1a1', headerBg:'#001f27',
-    headerText:'#586e75', accent:'#2aa198',
-    rtlLineH: 2.6, desc:'Easy contrast'
-  },
-  forest: {
-    name:'Forest', group:'dark', emoji:'🌲',
-    bg:'#0d1f0d', text:'#c8e6c9', headerBg:'#061206',
-    headerText:'#4a8a4a', accent:'#66bb6a',
-    rtlLineH: 2.6, desc:'Nature calm'
-  },
-  slate: {
-    name:'Slate', group:'dark', emoji:'🔷',
-    bg:'#1a1f2e', text:'#c5cfe8', headerBg:'#0d1118',
-    headerText:'#5a7090', accent:'#7e9cbf',
-    rtlLineH: 2.6, desc:'Cool blue'
-  }
+// api/translate.js — Vercel Serverless Function
+// PDF Translation — Quality-driven multi-agent routing with hallucination detection
+//
+// Key features:
+//   1. Routing based on declared source language (saves Gemini for hard scripts)
+//   2. Per-page quality detection (cycle/repetition/length anomalies)
+//   3. Per-page Gemini rescue when Llama produces garbage
+//   4. Hallucination signature detector — catches Llama fabricating on classical
+//      texts (Islamic, Buddhist, Hindu, etc.) even when output isn't repetitive
+//   5. Session-level lock: once a hard-source signature is detected, all
+//      subsequent batches in this session route to Gemini regardless of routing
+//   6. OCR→Qwen3 pipeline as last resort when Gemini quota exhausts
+//
+// Provider field returned to client:
+//   'gemini'              — Gemini handled cleanly
+//   'llama'               — Llama handled cleanly
+//   'llama+gemini'        — Llama tried, some pages escalated to Gemini
+//   'gemini+llama'        — Gemini tried, some pages fell back to Llama
+//   'llama+gemini+pipeline' — Both vision providers tried, final pipeline rescue
+//   'pipeline'            — Pipeline-only (Gemini exhausted, Llama looping)
+//
+// Setup:
+//   Required: GEMINI_API_KEY  — aistudio.google.com (20 RPD free)
+//   Optional: GROQ_API_KEY    — console.groq.com (1000 RPD free, no card)
+
+const { GoogleGenerativeAI } = require("@google/generative-ai");
+
+const queue       = [];
+const jobResults  = {};
+let isProcessing  = false;
+
+// Session state
+let geminiAvailable    = true;   // flips false when Gemini quota exhausts
+let hardSourceDetected = false;  // flips true when classical/religious text detected
+
+const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
+const GROQ_API_KEY   = process.env.GROQ_API_KEY;
+
+const LANGUAGES = {
+  en:"English", ar:"Arabic",  fr:"French",   es:"Spanish",
+  de:"German",  it:"Italian", pt:"Portuguese",ru:"Russian",
+  zh:"Chinese (Simplified)", ja:"Japanese",  ko:"Korean",
+  tr:"Turkish", fa:"Persian (Farsi)", ur:"Urdu", hi:"Hindi",
+  bn:"Bengali", id:"Indonesian", ms:"Malay",  nl:"Dutch",
+  pl:"Polish",  sv:"Swedish",   no:"Norwegian",da:"Danish",
+  fi:"Finnish", cs:"Czech",     ro:"Romanian", hu:"Hungarian",
+  el:"Greek",   he:"Hebrew",    th:"Thai",     vi:"Vietnamese",
+  uk:"Ukrainian",bg:"Bulgarian",hr:"Croatian", sk:"Slovak",
+  ca:"Catalan", az:"Azerbaijani",kk:"Kazakh",  uz:"Uzbek",
+  sw:"Swahili", am:"Amharic",   so:"Somali",   ha:"Hausa"
 };
 
-let pdfTheme    = 'parchment';
-let pdfFontSize = 11;    // pt
-let pdfSpacing  = 1.8;   // line height multiplier
-let pdfMargin   = 22;    // mm
+// Languages explicitly requiring Gemini for OCR quality
+const KNOWN_HARD_SCRIPTS = new Set(['ar', 'fa', 'ur', 'he', 'am', 'th']);
 
-function hexToRgb(hex) {
-  const h = hex.replace('#','');
-  return [
-    parseInt(h.slice(0,2),16),
-    parseInt(h.slice(2,4),16),
-    parseInt(h.slice(4,6),16)
-  ];
-}
+// ─── Hallucination signature patterns ─────────────────────────────────────
+// These appear in Llama's output when it's fabricating content from training
+// data instead of reading the actual page. Detection across multiple religious
+// and classical traditions, not Arabic-specific.
+const HALLUCINATION_SIGNATURES = [
+  // Islamic / classical Arabic markers
+  /peace be upon (him|her|them)/gi,
+  /\b(may|the) (god|allah) (be pleased|forgive|bless|the almighty)/gi,
+  /it (was|is) narrated (by|that|from)/gi,
+  /\bthe (prophet|messenger) (of god|of allah|peace)/gi,
+  /\b(hadith|quran|qur'an|allah|sunnah|sahaba)\b/gi,
+  /\b(sahih|tafsir|fiqh|sharia|ulema)\b/gi,
+  /\bibn\s+[A-Z][a-z]+/g,  // "ibn Arabi", "ibn Sina" etc.
 
-function buildSwatches() {
-  ['light','dark'].forEach(group => {
-    const el = document.getElementById(group === 'light' ? 'lightSwatches' : 'darkSwatches');
-    if (!el) return;
-    el.innerHTML = '';
-    Object.entries(PDF_THEMES)
-      .filter(([,t]) => t.group === group)
-      .forEach(([key, t]) => {
-        const div = document.createElement('div');
-        div.className = 'theme-swatch' + (key === pdfTheme ? ' active' : '');
-        div.title = t.desc;
-        div.onclick = () => selectTheme(key);
-        const textHex = t.text;
-        div.innerHTML = `
-          <div class="swatch-dot" style="background:${t.bg};color:${textHex}">Aa</div>
-          <div class="swatch-name">${t.name}</div>`;
-        el.appendChild(div);
-      });
-  });
-  applyThemePreview();
-}
+  // Sufi / Ibn Arabi specific patterns (the chapter naming style)
+  /chapter on .{1,40}translation/gi,
+  /book of (translations|biographies|exhortations|indications|sayings)/gi,
+  /\b(a hint|an indication|a fine point|a subtlety|a nice saying)\s*[-:—]/gi,
 
-function selectTheme(key) {
-  pdfTheme = key;
-  document.querySelectorAll('.theme-swatch').forEach(el => el.classList.remove('active'));
-  event.currentTarget.classList.add('active');
-  applyThemePreview();
-}
+  // Buddhist markers
+  /\b(buddha said|the dharma|sutra|bodhisattva|sangha|nirvana)\b/gi,
+  /\b(zen master|mahayana|theravada)\b/gi,
 
-function applyThemePreview() {
-  const t = PDF_THEMES[pdfTheme];
-  const p = document.getElementById('themePreview');
-  if (!p) return;
-  p.style.background   = t.bg;
-  p.style.borderColor  = t.accent;
-  document.getElementById('previewTitle').style.color  = t.accent;
-  document.getElementById('previewBody').style.color   = t.text;
-  document.getElementById('previewTitle').textContent  = `${t.emoji}  ${t.name} — ${t.desc}`;
-}
+  // Hindu / Sanskrit markers
+  /\b(bhagavan|krishna said|veda|upanishad|purana|shloka|verse said)\b/gi,
+  /\b(arjuna|guru|swami|brahman|atman)\b/gi,
 
-function setFontSize(n) {
-  pdfFontSize = n;
-  document.querySelectorAll('#fontSizeBtns .typo-btn').forEach(b => b.classList.remove('active'));
-  event.currentTarget.classList.add('active');
-}
-function setSpacing(n) {
-  pdfSpacing = n;
-  document.querySelectorAll('#spacingBtns .typo-btn').forEach(b => b.classList.remove('active'));
-  event.currentTarget.classList.add('active');
-}
-function setMargin(n) {
-  pdfMargin = n;
-  document.querySelectorAll('#marginBtns .typo-btn').forEach(b => b.classList.remove('active'));
-  event.currentTarget.classList.add('active');
-}
+  // Jewish / Hebrew markers
+  /\b(torah|talmud|midrash|rabbi|halakha|kabbalah)\b/gi,
+  /\bblessed be he\b/gi,
 
-// ── Free Tier Guide ────────────────────────────────────────────
-function toggleGuide() {
-  const body = document.getElementById('guideBody');
-  const chevron = document.getElementById('guideChevron');
-  const open = body.style.display !== 'none';
-  body.style.display = open ? 'none' : 'block';
-  chevron.style.transform = open ? '' : 'rotate(180deg)';
-  if (!open) updateCalc();
-}
+  // Christian medieval / patristic markers
+  /\b(saint augustine|aquinas|patristic|epistle of)\b/gi,
+];
 
-// Live estimate strip under the settings card
-function updateEstimate() {
-  const strip = document.getElementById('estimateStrip');
-  const start = parseInt(document.getElementById('startPage').value) || 1;
-  const end   = parseInt(document.getElementById('endPage').value)   || totalPages;
-  const batch = parseInt(document.getElementById('batchSize').value) || 3;
-  if (!end || end < start) { strip.classList.add('hidden'); return; }
+function detectHallucinationProneSource(text) {
+  if (!text || text.length < 50) return false;
 
-  const pages    = end - start + 1;
-  const requests = Math.ceil(pages / batch);
-  const minSecs  = requests * 70; // ~70s per batch (55s delay + ~15s processing)
-  const mins     = Math.round(minSecs / 60);
-  const quota    = Math.round(requests / 1000 * 100);
-  const quotaCol = quota > 80 ? '#c07070' : quota > 50 ? '#b89040' : '#5daa72';
-
-  strip.classList.remove('hidden');
-  strip.innerHTML = `
-    <span style="color:var(--gold)">${pages} pages</span>
-    &rarr; <strong style="color:var(--white)">${requests} API requests</strong>
-    &nbsp;&middot;&nbsp; ~${mins} min
-    &nbsp;&middot;&nbsp; <span style="color:${quotaCol}">${quota}% of daily free quota</span>
-    ${quota > 90
-      ? '<br><span style="color:#c07070">⚠ Near daily limit — consider splitting across two days</span>'
-      : quota > 50
-      ? '<br><span style="color:#b89040">Tip: save the rest of your quota for another book today</span>'
-      : ''}`;
-}
-
-// Calculator inside the guide panel
-function updateCalc() {
-  const pages   = parseInt(document.getElementById('calcPages').value)  || 100;
-  const batch   = parseInt(document.getElementById('calcBatch').value)  || 3;
-  const requests = Math.ceil(pages / batch);
-  const totalSec = requests * 70;
-  const mins     = Math.floor(totalSec / 60);
-  const secs     = totalSec % 60;
-  const quota    = Math.round(requests / 1000 * 100);
-  const books250 = Math.floor(1000 / requests * 10) / 10;
-  const quotaCol = quota > 80 ? '#c07070' : quota > 50 ? '#b89040' : '#5daa72';
-  const timeStr  = mins > 0 ? `${mins}m ${secs}s` : `${secs}s`;
-
-  document.getElementById('calcResult').innerHTML = `
-    <b style="color:var(--white)">${pages} pages</b> at batch size ${batch}
-    = <b style="color:var(--gold)">${requests} API requests</b><br>
-    Estimated time: <b style="color:var(--white)">${timeStr}</b>
-    &nbsp;&middot;&nbsp;
-    Daily quota used: <b style="color:${quotaCol}">${quota}%</b>
-    (${1000 - requests} requests remaining — flash-lite free tier)<br>
-    You can translate roughly <b style="color:var(--gold)">${books250} books</b>
-    of this size per day on the free tier.
-    ${quota > 100
-      ? `<br><span style="color:#c07070">⚠ Exceeds one day's quota — split across ${Math.ceil(quota/100)} days or use Start/End page.</span>`
-      : ''}`;
-}
-
-// ── Server init ────────────────────────────────────────────────
-window.addEventListener('load', async () => {
-  buildSwatches();
-  try {
-    const r = await fetch(`${serverUrl}/api/translate?action=queue`);
-    if (r.ok) {
-      document.getElementById('serverStatus').innerHTML =
-        '<div class="status-ok">✦ &ensp;Translation server is online and ready</div>';
-      loadLanguages();
-    }
-  } catch(e) {
-    document.getElementById('serverStatus').innerHTML =
-      '<div class="status-err">⚠ &ensp;Translation server is offline — please check your deployment</div>';
+  let signalCount = 0;
+  for (const pattern of HALLUCINATION_SIGNATURES) {
+    const matches = text.match(pattern);
+    if (matches) signalCount += matches.length;
+    if (signalCount >= 3) return true; // early exit
   }
-});
+  return signalCount >= 3;
+}
 
-async function loadLanguages() {
-  try {
-    const r = await fetch(`${serverUrl}/api/translate?action=languages`);
-    const data = await r.json();
-    populateLangs(data.languages);
-  } catch(e) {
-    populateLangs(FALLBACK_LANGS);
+// ─── Prompt builders ──────────────────────────────────────────────────────
+function buildTranslatePrompt(targetLang, sourceLang, pageNums, isGroqModel = false) {
+  const groqExtra = isGroqModel ? `
+ANTI-HALLUCINATION RULES — CRITICAL for this model:
+- Output ONLY text you can physically READ in the image. Nothing else.
+- If you cannot read a word clearly, write [unclear] — do NOT guess.
+- If a page has only a few lines, your output must be only a few lines.
+- NEVER generate filler text, religious commentary, or scholarly prose from memory.
+- NEVER write phrases like "It was narrated", "Peace be upon him", "The Prophet said"
+  unless those exact words are clearly visible in the image.
+- NEVER repeat any sentence more than once. If you catch yourself repeating, STOP.
+- If you have written more than 30 sentences for one page, STOP.
+- Do NOT translate Arabic words by their phonetic similarity to other names —
+  read each word carefully and translate its actual meaning.
+` : '';
+
+  return `You are a professional literary translator. Translate all text from these scanned document pages from ${sourceLang} into ${targetLang}.
+
+STRICT RULES:
+- Translate EVERY word completely into ${targetLang}
+- Do NOT leave any word in the source language
+- Do NOT use parentheses to preserve original terms — translate everything
+- Preserve the original paragraph structure and line breaks
+- If a page is blank, write exactly: [Blank page]
+- Do NOT add translator notes, footnotes, commentary, or explanations
+- Do NOT wrap your response in markdown code blocks
+- Do NOT write anything outside the page blocks below
+${groqExtra}
+CRITICAL FORMATTING RULE:
+You are translating ${pageNums.length} separate pages: ${pageNums.join(', ')}.
+You MUST output a separate ===PAGE N=== block for EVERY page number listed.
+Never merge two pages into one block. Never skip a page number.
+
+STOP RULE: Translate ONLY the text visible in each image.
+Once everything visible is translated, STOP immediately.
+Do NOT continue, repeat, or add anything after the visible text ends.
+
+Your response must contain EXACTLY ${pageNums.length} blocks:
+
+${pageNums.map(n =>
+  `===PAGE ${n}===\n[your complete ${targetLang} translation of page ${n} here]\n===END===`
+).join('\n\n')}`;
+}
+
+function buildOCRPrompt(sourceLang, pageNums) {
+  return `You are an OCR engine. Extract ALL text from these scanned document pages exactly as written.
+
+RULES:
+- Extract the EXACT text visible — every word, every line
+- Preserve the ORIGINAL script — do NOT translate
+- Preserve paragraph structure and line breaks
+- If you cannot read a word, write [unclear]
+- If a page is blank, write exactly: [Blank page]
+- Do NOT add commentary or interpretation
+- Do NOT repeat any text — extract each line exactly once then STOP
+
+Output format — EXACTLY ${pageNums.length} blocks:
+
+${pageNums.map(n =>
+  `===PAGE ${n}===\n[exact text from page ${n} in original script]\n===END===`
+).join('\n\n')}`;
+}
+
+function buildTextTranslatePrompt(targetLang, sourceLang, text) {
+  return `You are a professional literary translator. Translate the following text from ${sourceLang} into ${targetLang}.
+
+RULES:
+- Translate EVERY word completely into ${targetLang}
+- Preserve paragraph structure and line breaks
+- Do NOT add notes, commentary, or explanations
+- Do NOT repeat any sentence — if the source repeats, translate each occurrence exactly once
+- If a section says [unclear] or [Blank page], keep it as-is
+- STOP when the text ends
+
+TEXT TO TRANSLATE:
+${text}
+
+TRANSLATION:`;
+}
+
+// ─── Page extractor ───────────────────────────────────────────────────────
+function extractPages(raw, pageNums) {
+  let text = raw
+    .replace(/^```[\w]*\n?/m, '').replace(/\n?```\s*$/m, '')
+    .replace(/<think>[\s\S]*?<\/think>/gi, '')
+    .replace(/<thinking>[\s\S]*?<\/thinking>/gi, '');
+
+  text = text
+    .replace(/===\s*PAGE\s+(\d+)\s*===/gi, (_, n) => `\n===PAGE ${n}===\n`)
+    .replace(/===\s*END\s*===/gi, '\n===END===\n');
+
+  const segments = text.split(/\n===PAGE (\d+)===\n/);
+  const blocks   = {};
+
+  for (let i = 1; i < segments.length - 1; i += 2) {
+    const pn      = parseInt(segments[i], 10);
+    const content = segments[i + 1].replace(/\n?===END===\n?/gi, '').trim();
+    if (content) blocks[pn] = content;
   }
-}
 
-const FALLBACK_LANGS = {
-  en:"English", ar:"Arabic", fr:"French", es:"Spanish", de:"German",
-  it:"Italian", pt:"Portuguese", ru:"Russian", zh:"Chinese (Simplified)",
-  ja:"Japanese", ko:"Korean", tr:"Turkish", fa:"Persian (Farsi)",
-  ur:"Urdu", hi:"Hindi", bn:"Bengali", id:"Indonesian", ms:"Malay",
-  nl:"Dutch", pl:"Polish", sv:"Swedish", no:"Norwegian", da:"Danish",
-  fi:"Finnish", cs:"Czech", ro:"Romanian", hu:"Hungarian", el:"Greek",
-  he:"Hebrew", th:"Thai", vi:"Vietnamese", uk:"Ukrainian", bg:"Bulgarian",
-  hr:"Croatian", sk:"Slovak", ca:"Catalan", az:"Azerbaijani",
-  kk:"Kazakh", uz:"Uzbek", sw:"Swahili", am:"Amharic", so:"Somali", ha:"Hausa"
-};
-
-const LANG_FLAGS = {
-  en:"🇬🇧", ar:"🇸🇦", fr:"🇫🇷", es:"🇪🇸", de:"🇩🇪", it:"🇮🇹", pt:"🇵🇹",
-  ru:"🇷🇺", zh:"🇨🇳", ja:"🇯🇵", ko:"🇰🇷", tr:"🇹🇷", fa:"🇮🇷", ur:"🇵🇰",
-  hi:"🇮🇳", bn:"🇧🇩", id:"🇮🇩", ms:"🇲🇾", nl:"🇳🇱", pl:"🇵🇱", sv:"🇸🇪",
-  no:"🇳🇴", da:"🇩🇰", fi:"🇫🇮", cs:"🇨🇿", ro:"🇷🇴", hu:"🇭🇺", el:"🇬🇷",
-  he:"🇮🇱", th:"🇹🇭", vi:"🇻🇳", uk:"🇺🇦", bg:"🇧🇬", hr:"🇭🇷", sk:"🇸🇰",
-  ca:"🏴", az:"🇦🇿", kk:"🇰🇿", uz:"🇺🇿", sw:"🇰🇪", am:"🇪🇹", so:"🇸🇴", ha:"🇳🇬"
-};
-
-function populateLangs(langs) {
-  const src = document.getElementById('sourceLang');
-  const tgt = document.getElementById('targetLang');
-  src.innerHTML = '<option value="auto">🔍 Auto-detect</option>';
-  tgt.innerHTML = '';
-  for (const [code, name] of Object.entries(langs)) {
-    const flag = LANG_FLAGS[code] || '🌐';
-    src.innerHTML += `<option value="${code}">${flag} ${name}</option>`;
-    tgt.innerHTML += `<option value="${code}" ${code==='en'?'selected':''}>${flag} ${name}</option>`;
+  if (Object.keys(blocks).length === 0 && text.trim().length > 20 && pageNums.length === 1) {
+    blocks[pageNums[0]] = text.trim();
   }
-}
-populateLangs(FALLBACK_LANGS);
 
-// ── File Upload ────────────────────────────────────────────────
-const dropZone = document.getElementById('dropZone');
-dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.classList.add('drag'); });
-dropZone.addEventListener('dragleave', () => dropZone.classList.remove('drag'));
-dropZone.addEventListener('drop', e => {
-  e.preventDefault();
-  dropZone.classList.remove('drag');
-  handleFileList(e.dataTransfer.files);
-});
-document.getElementById('fileInput').addEventListener('change', e => handleFileList(e.target.files));
-
-function handleFileList(fileList) {
-  if (!fileList || fileList.length === 0) return;
-  const files = Array.from(fileList);
-
-  // If a PDF is among the files, use it (PDF takes priority)
-  const pdf = files.find(f => f.name.toLowerCase().endsWith('.pdf'));
-  if (pdf) { handlePDF(pdf); return; }
-
-  // Otherwise treat all files as image pages
-  const imageTypes = ['image/jpeg','image/jpg','image/png','image/webp','image/tiff','image/bmp'];
-  const imgs = files.filter(f => imageTypes.includes(f.type));
-  if (imgs.length > 0) { handleImages(imgs); return; }
-
-  alert('Please upload a PDF file or image files (JPG, PNG, WEBP, TIFF).');
-}
-
-async function handlePDF(file) {
-  fileMode = 'pdf';
-  imageFiles = [];
-  const ab = await file.arrayBuffer();
-  pdfDoc = await pdfjsLib.getDocument({ data: ab }).promise;
-  totalPages = pdfDoc.numPages;
-  setPageRange(totalPages);
-  showFileInfo('📄', file.name, `${totalPages} pages · ${(file.size/1024/1024).toFixed(1)} MB`);
-  log(`✓ Loaded PDF: ${file.name} (${totalPages} pages)`, 'ok');
-  updateEstimate();
-}
-
-async function handleImages(files) {
-  fileMode   = 'images';
-  pdfDoc     = null;
-  imageFiles = files;
-  totalPages = files.length;
-  setPageRange(totalPages);
-
-  const totalMB = (files.reduce((s, f) => s + f.size, 0) / 1024 / 1024).toFixed(1);
-  const names   = files.length === 1
-    ? files[0].name
-    : `${files[0].name} … +${files.length - 1} more`;
-  showFileInfo('🖼️', names, `${files.length} image${files.length > 1 ? 's' : ''} · ${totalMB} MB`);
-  log(`✓ Loaded ${files.length} image${files.length > 1 ? 's' : ''} as pages`, 'ok');
-  updateEstimate();
-}
-
-function setPageRange(n) {
-  document.getElementById('endPage').value   = n;
-  document.getElementById('endPage').max     = n;
-  document.getElementById('startPage').max   = n;
-  document.getElementById('statTotal').textContent = n;
-}
-
-function showFileInfo(icon, name, meta) {
-  const fi = document.getElementById('fileInfo');
-  fi.className = 'file-info';
-  fi.innerHTML = `
-    <div class="fi-icon">${icon}</div>
-    <div>
-      <div class="fi-name">${name}</div>
-      <div class="fi-meta">${meta}</div>
-    </div>`;
-}
-
-// ── Page Rendering ─────────────────────────────────────────────
-async function renderPage(pageNum) {
-  if (fileMode === 'images') {
-    // Image mode: convert the image file directly to base64 JPEG
-    return await imageFileToBase64(imageFiles[pageNum - 1]);
+  const parsed = {};
+  for (const pn of pageNums) {
+    parsed[pn] = blocks[pn] || `[Could not extract page ${pn}]`;
   }
-  // PDF mode: rasterise via PDF.js
-  const page     = await pdfDoc.getPage(pageNum);
-  const viewport = page.getViewport({ scale: 1.4 });
-  const canvas   = document.createElement('canvas');
-  canvas.width   = viewport.width;
-  canvas.height  = viewport.height;
-  await page.render({ canvasContext: canvas.getContext('2d'), viewport }).promise;
-  return canvas.toDataURL('image/jpeg', 0.82).split(',')[1];
+  return parsed;
 }
 
-// Convert an image File to base64 JPEG string (strips the data URI prefix)
-function imageFileToBase64(file) {
-  return new Promise((resolve, reject) => {
-    // For non-JPEG images, draw through a canvas to normalise format
-    const img = new Image();
-    const url = URL.createObjectURL(file);
-    img.onload = () => {
-      const canvas   = document.createElement('canvas');
-      canvas.width   = img.naturalWidth;
-      canvas.height  = img.naturalHeight;
-      canvas.getContext('2d').drawImage(img, 0, 0);
-      URL.revokeObjectURL(url);
-      resolve(canvas.toDataURL('image/jpeg', 0.88).split(',')[1]);
-    };
-    img.onerror = () => { URL.revokeObjectURL(url); reject(new Error(`Failed to load image: ${file.name}`)); };
-    img.src = url;
-  });
+// ─── Quality detection: cycles + frequency + length ──────────────────────
+function deduplicateContent(text) {
+  const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
+  if (lines.length < 4) return text;
+
+  // Pass 1: frequency cap (max 2 occurrences of any sentence)
+  const freq  = new Map();
+  const pass1 = [];
+
+  for (const line of lines) {
+    const key = line.toLowerCase().replace(/\s+/g, ' ').replace(/[.,:;!?]+$/, '').trim();
+    if (key.length < 25) { pass1.push(line); continue; }
+    const count = (freq.get(key) || 0) + 1;
+    freq.set(key, count);
+    if (count <= 2) pass1.push(line);
+  }
+
+  // Pass 2: cycle detection
+  const result = detectAndRemoveCycles(pass1);
+
+  // Pass 3: hard word cap
+  const words = result.split(/\s+/).length;
+  if (words > 600) {
+    return result.split(/\s+/).slice(0, 500).join(' ') + '\n[⚠ Output truncated — possible hallucination]';
+  }
+
+  return result;
 }
 
-// ── Job Submission & Polling ───────────────────────────────────
-async function submitBatch(images, pageNums, sourceLang, targetLang) {
-  const r = await fetch(`${serverUrl}/api/translate`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ images, pageNums, sourceLang, targetLang })
-  });
-  if (!r.ok) throw new Error(`Server error ${r.status}`);
-  return await r.json();
-}
+function detectAndRemoveCycles(lines) {
+  const output = [];
+  let i = 0;
 
-async function pollJob(id) {
-  const qBanner = document.getElementById('queueBanner');
-  while (true) {
-    await new Promise(r => setTimeout(r, 1500));
-    const r = await fetch(`${serverUrl}/api/translate?action=status&id=${id}`);
-    const d = await r.json();
-    if (d.status === 'queued' || d.status === 'processing') {
-      if (d.queuePos > 1) {
-        qBanner.classList.remove('hidden');
-        document.getElementById('queueInfo').textContent =
-          `Position ${d.queuePos} in queue — please wait`;
-      } else {
-        qBanner.classList.add('hidden');
+  while (i < lines.length) {
+    let cycleFound = false;
+
+    for (let cycleLen = 2; cycleLen <= 6 && !cycleFound; cycleLen++) {
+      if (i + cycleLen * 3 > lines.length) continue;
+
+      const cycle = lines.slice(i, i + cycleLen);
+      let reps = 1;
+      let j = i + cycleLen;
+
+      while (j + cycleLen <= lines.length) {
+        let match = true;
+        for (let k = 0; k < cycleLen; k++) {
+          const a = cycle[k].toLowerCase().replace(/\s+/g, ' ').trim();
+          const b = lines[j + k].toLowerCase().replace(/\s+/g, ' ').trim();
+          if (a !== b) { match = false; break; }
+        }
+        if (!match) break;
+        reps++;
+        j += cycleLen;
       }
-      continue;
+
+      if (reps >= 3) {
+        for (const line of cycle) output.push(line);
+        output.push('[⚠ Repetitive content removed]');
+        i = j;
+        cycleFound = true;
+      }
     }
-    qBanner.classList.add('hidden');
-    if (d.status === 'done') return d.translations;
-    if (d.status === 'error') {
-      const e = new Error(d.error);
-      // Tag quota errors so the caller can detect them without string parsing
-      if (d.error && d.error.includes('QUOTA_EXHAUSTED')) e._quotaExhausted = true;
-      throw e;
+
+    if (!cycleFound) {
+      output.push(lines[i]);
+      i++;
     }
   }
+
+  return output.join('\n');
 }
 
-// ── Translation Runner ─────────────────────────────────────────
-async function startTranslation() {
-  if (!pdfDoc && imageFiles.length === 0) { alert('Please upload a PDF or image files first.'); return; }
+function isPageGarbage(originalText, dedupedText) {
+  if (!originalText || originalText.startsWith('[Could not extract')) return true;
+  if (dedupedText.includes('[⚠')) return true;
+  const origWords  = originalText.split(/\s+/).length;
+  const dedupWords = dedupedText.split(/\s+/).length;
+  return origWords > 50 && dedupWords < origWords * 0.4;
+}
 
-  const batchSize  = parseInt(document.getElementById('batchSize').value);
-  const startPage  = parseInt(document.getElementById('startPage').value) || 1;
-  const endPage    = parseInt(document.getElementById('endPage').value) || totalPages;
-  const srcLang    = document.getElementById('sourceLang').value;
-  const tgtLang    = document.getElementById('targetLang').value;
+// ─── Provider: Gemini ─────────────────────────────────────────────────────
+async function callGemini(job) {
+  const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
+  const model = genAI.getGenerativeModel({
+    model: "gemini-2.5-flash-lite",
+    generationConfig: {
+      maxOutputTokens: job.pageNums.length * 800,
+      temperature: 0.1
+    }
+  });
 
-  translations = {};
-  pagesDone = 0;
-  paused = false;
-  stopped = false;
-  startTime = Date.now();
+  const targetLang = LANGUAGES[job.targetLang] || "English";
+  const sourceLang = job.sourceLang === "auto"
+    ? "the source language (auto-detect)"
+    : (LANGUAGES[job.sourceLang] || "the source language");
 
-  document.getElementById('startBtn').disabled = true;
-  document.getElementById('pauseBtn').classList.remove('hidden');
-  document.getElementById('stopBtn').classList.remove('hidden');
-  document.getElementById('progressCard').classList.remove('hidden');
-  document.getElementById('previewCard').classList.remove('hidden');
-  document.getElementById('statTotal').textContent = endPage - startPage + 1;
+  const parts = [];
+  for (let i = 0; i < job.images.length; i++) {
+    parts.push({ text: `[Page ${job.pageNums[i]}]` });
+    parts.push({ inlineData: { mimeType: "image/jpeg", data: job.images[i] } });
+  }
+  parts.push({ text: buildTranslatePrompt(targetLang, sourceLang, job.pageNums, false) });
 
-  const srcName = document.getElementById('sourceLang')
-    .options[document.getElementById('sourceLang').selectedIndex].text;
-  const tgtName = document.getElementById('targetLang')
-    .options[document.getElementById('targetLang').selectedIndex].text;
+  const result = await model.generateContent(parts);
+  const text   = result.response.text();
 
-  log(`Starting: pages ${startPage}–${endPage} | ${srcName} → ${tgtName} | batch ${batchSize}`, 'info');
+  if (!text || text.trim().length < 5) {
+    throw new Error('RECITATION: Gemini returned empty (silent safety filter)');
+  }
+  return text;
+}
 
-  for (let p = startPage; p <= endPage && !stopped; p += batchSize) {
-    while (paused && !stopped) await new Promise(r => setTimeout(r, 500));
-    if (stopped) break;
+// ─── Provider: Llama Scout (vision OCR + translate) ───────────────────────
+async function callLlamaTranslate(job) {
+  const targetLang = LANGUAGES[job.targetLang] || "English";
+  const sourceLang = job.sourceLang === "auto"
+    ? "the source language (auto-detect)"
+    : (LANGUAGES[job.sourceLang] || "the source language");
 
-    const batch = [];
-    for (let j = p; j < Math.min(p + batchSize, endPage + 1); j++) batch.push(j);
+  const content = [];
+  for (let i = 0; i < job.images.length; i++) {
+    content.push({ type: "text", text: `[Page ${job.pageNums[i]}]` });
+    content.push({
+      type: "image_url",
+      image_url: { url: `data:image/jpeg;base64,${job.images[i]}` }
+    });
+  }
+  content.push({ type: "text", text: buildTranslatePrompt(targetLang, sourceLang, job.pageNums, true) });
 
-    log(`Rendering pages ${batch.join(', ')}…`, 'dim');
+  return callGroqAPI("meta-llama/llama-4-scout-17b-16e-instruct", content, job.pageNums.length * 800);
+}
+
+// ─── Provider: Llama Scout OCR-only ───────────────────────────────────────
+async function callLlamaOCR(job) {
+  const sourceLang = job.sourceLang === "auto"
+    ? "the source language"
+    : (LANGUAGES[job.sourceLang] || "the source language");
+
+  const content = [];
+  for (let i = 0; i < job.images.length; i++) {
+    content.push({ type: "text", text: `[Page ${job.pageNums[i]}]` });
+    content.push({
+      type: "image_url",
+      image_url: { url: `data:image/jpeg;base64,${job.images[i]}` }
+    });
+  }
+  content.push({ type: "text", text: buildOCRPrompt(sourceLang, job.pageNums) });
+
+  return callGroqAPI("meta-llama/llama-4-scout-17b-16e-instruct", content, job.pageNums.length * 600);
+}
+
+// ─── Provider: Qwen3-32B text-only ───────────────────────────────────────
+async function callQwen3Translate(sourceLang, targetLang, extractedText) {
+  const tgt = LANGUAGES[targetLang] || "English";
+  const src = sourceLang === "auto"
+    ? "the source language (auto-detect)"
+    : (LANGUAGES[sourceLang] || "the source language");
+
+  const content = [{ type: "text", text: buildTextTranslatePrompt(tgt, src, extractedText) }];
+  return callGroqAPI("qwen/qwen3-32b", content, 1500);
+}
+
+async function callGroqAPI(modelId, content, maxTokens) {
+  const response = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method:  "POST",
+    headers: {
+      "Content-Type":  "application/json",
+      "Authorization": `Bearer ${GROQ_API_KEY}`
+    },
+    body: JSON.stringify({
+      model:             modelId,
+      messages:          [{ role: "user", content }],
+      max_tokens:        maxTokens,
+      temperature:       0.15,
+      frequency_penalty: 0.3
+    })
+  });
+
+  if (!response.ok) {
+    const err = await response.json().catch(() => ({}));
+    const msg = err?.error?.message || `Groq HTTP ${response.status}`;
+    throw new Error(`[Groq/${modelId}] ${msg}`);
+  }
+
+  const data = await response.json();
+  return data.choices?.[0]?.message?.content || "";
+}
+
+// ─── Per-page Gemini rescue ───────────────────────────────────────────────
+async function rescueWithGemini(job, badPages) {
+  console.log(`[translate] Gemini rescue for pages: ${badPages.join(',')}`);
+  const rescued = {};
+
+  for (const pn of badPages) {
+    if (!geminiAvailable) break;
+    const idx = job.pageNums.indexOf(pn);
+    if (idx === -1) continue;
+
+    const single = { ...job, images: [job.images[idx]], pageNums: [pn] };
     try {
-      const images = await Promise.all(batch.map(renderPage));
-      log(`Submitting pages ${batch.join(', ')} to server…`, 'info');
-      const job = await submitBatch(images, batch, srcLang, tgtLang);
-      if (job.queuePos > 1) log(`Queued at position ${job.queuePos}. Waiting…`, 'warn');
-      const result = await pollJob(job.id);
-
-      Object.assign(translations, result);
-      pagesDone += batch.length;
-      updateProgress(pagesDone, endPage - startPage + 1);
-      updatePreview(batch, result);
-      // Show which provider handled this batch
-      const provider = result._provider || '';
-      const providerTag = provider === 'groq' ? ' [Groq 🦙]' : ' [Gemini ✦]';
-      log(`✓ Pages ${batch.join(', ')} done${providerTag}`, 'ok');
-    } catch(err) {
-      const msg = err.message || '';
-
-      // ── Gemini RECITATION / SAFETY block ──────────────────────────────
-      if (msg.includes('RECITATION') || msg.includes('recitation') || msg.includes('SAFETY')) {
-        log(`✗ Gemini safety block on pages ${batch.join(',')} — switching to Groq for this batch…`, 'warn');
-        // Server handles the Groq fallback automatically — just retry once without delay
-        await new Promise(r => setTimeout(r, 3000));
-        p -= batchSize;
-        continue;
+      await new Promise(r => setTimeout(r, 4000));
+      const raw    = await callGemini(single);
+      const parsed = extractPages(raw, [pn]);
+      const clean  = deduplicateContent(parsed[pn]);
+      if (!parsed[pn].startsWith('[Could not extract') && !isPageGarbage(parsed[pn], clean)) {
+        rescued[pn] = clean;
       }
-
-      // ── Daily quota exhausted — stop immediately, no point retrying ──
-      if (err._quotaExhausted ||
-          msg.includes('GenerateRequestsPerDayPerProjectPerModel') ||
-          (msg.includes('429') && msg.includes('limit: 20')) ||
-          msg.includes('QUOTA_EXHAUSTED')) {
-
-        const both = msg.includes('QUOTA_EXHAUSTED_BOTH');
-        const retryMatch = msg.match(/Please retry in ([\d.]+)s/);
-        const resetMsg = retryMatch
-          ? `Quota resets in ~${Math.ceil(retryMatch[1] / 60)} minutes.`
-          : both
-          ? 'Gemini resets midnight PT · Groq resets midnight UTC.'
-          : 'Quota resets at midnight Pacific Time (UTC-7).';
-
-        log(`✗ ${both ? 'Both Gemini & Groq' : 'Daily'} quota exhausted on pages ${batch.join(',')}`, 'err');
-        log(`⏰ ${resetMsg}`, 'warn');
-        if (!both) {
-          log('💡 Add GROQ_API_KEY in Vercel env vars for automatic fallback (free, 1000 RPD)', 'warn');
-        }
-        log('💡 Or enable Gemini billing at aistudio.google.com (~$0.30 for a 400-page book)', 'warn');
-
-        if (Object.keys(translations).length > 0) {
-          log('⬇ Partial results available — downloading what was completed…', 'info');
-          document.getElementById('downloadBtn').classList.remove('hidden');
-        }
-        stopped = true;
+    } catch (err) {
+      const msg = err.message || '';
+      if (isGeminiDailyQuota(msg)) {
+        geminiAvailable = false;
+        console.log(`[translate] Gemini quota exhausted during rescue`);
         break;
       }
-
-      // ── 503 / transient server error — retry up to 3 times ──
-      if (msg.includes('503') || msg.includes('Service Unavailable') ||
-          msg.includes('high demand')) {
-        const retries = (err._retries || 0) + 1;
-        if (retries <= 3) {
-          err._retries = retries;
-          log(`✗ Server busy (attempt ${retries}/3) — retrying in 30 seconds…`, 'warn');
-          await new Promise(r => setTimeout(r, 30000));
-          p -= batchSize;
-          continue;
-        }
-        log(`✗ Server unavailable after 3 attempts — skipping pages ${batch.join(',')}`, 'err');
-        continue;
-      }
-
-      // ── RPM rate limit (per-minute, not per-day) — wait and retry ──
-      if (msg.includes('GenerateRequestsPerMinutePerProject') ||
-          msg.includes('GenerateContentInputTokens')) {
-        const retryMatch = msg.match(/Please retry in ([\d.]+)s/);
-        const wait = retryMatch ? Math.ceil(retryMatch[1]) * 1000 + 2000 : 35000;
-        log(`✗ Per-minute rate limit hit — waiting ${Math.ceil(wait/1000)}s…`, 'warn');
-        await new Promise(r => setTimeout(r, wait));
-        p -= batchSize;
-        continue;
-      }
-
-      // ── Unknown error — retry once after 15 seconds ──
-      log(`✗ Error on pages ${batch.join(',')}: ${msg.slice(0, 120)}`, 'err');
-      log('Retrying in 15 seconds…', 'warn');
-      await new Promise(r => setTimeout(r, 15000));
-      p -= batchSize;
     }
   }
 
-  if (!stopped) {
-    log('✅ All pages translated! Generating PDF…', 'ok');
-    document.getElementById('downloadBtn').classList.remove('hidden');
-  }
-  document.getElementById('startBtn').disabled = false;
-  document.getElementById('pauseBtn').classList.add('hidden');
-  document.getElementById('stopBtn').classList.add('hidden');
-  if (!stopped && Object.keys(translations).length > 0) downloadPDF();
+  return rescued;
 }
 
-function togglePause() {
-  paused = !paused;
-  const btn = document.getElementById('pauseBtn');
-  btn.textContent = paused ? '▶ Resume' : '⏸ Pause';
-  btn.className = paused ? 'btn btn-primary' : 'btn btn-amber';
-  log(paused ? 'Paused.' : 'Resumed.', 'warn');
+// ─── Per-page Llama rescue ────────────────────────────────────────────────
+async function rescueWithLlama(job, badPages) {
+  const rescued = {};
+  for (const pn of badPages) {
+    const idx = job.pageNums.indexOf(pn);
+    if (idx === -1) continue;
+    const single = { ...job, images: [job.images[idx]], pageNums: [pn] };
+    try {
+      await new Promise(r => setTimeout(r, 4000));
+      const raw    = await callLlamaTranslate(single);
+      const parsed = extractPages(raw, [pn]);
+      const clean  = deduplicateContent(parsed[pn]);
+      if (!isPageGarbage(parsed[pn], clean)) rescued[pn] = clean;
+    } catch (_) { /* skip */ }
+  }
+  return rescued;
 }
 
-function stopTranslation() {
-  if (!confirm('Stop translation? Progress so far will still be available to download.')) return;
-  stopped = true;
-  log('Stopped by user. Partial results available below.', 'warn');
-  document.getElementById('downloadBtn').classList.remove('hidden');
-}
+// ─── OCR→Qwen3 pipeline rescue (last resort) ──────────────────────────────
+async function rescueWithPipeline(job, badPages) {
+  console.log(`[translate] OCR→Qwen3 pipeline rescue for pages: ${badPages.join(',')}`);
+  const rescued = {};
 
-// ── UI Helpers ─────────────────────────────────────────────────
-function updateProgress(done, total) {
-  const pct = total > 0 ? (done / total * 100) : 0;
-  document.getElementById('progressBar').style.width = pct.toFixed(1) + '%';
-  document.getElementById('statDone').textContent = done;
-  document.getElementById('progressLabel').textContent =
-    `${done} of ${total} pages translated (${pct.toFixed(1)}%)`;
-  if (startTime && done > 0) {
-    const elapsed = (Date.now() - startTime) / 1000;
-    const rate = done / elapsed * 60;
-    document.getElementById('statRate').textContent = rate.toFixed(1);
-    const rem = (total - done) / (done / elapsed);
-    const m = Math.floor(rem / 60), s = Math.floor(rem % 60);
-    document.getElementById('statETA').textContent = `${m}m ${s}s`;
-  }
-}
+  for (const pn of badPages) {
+    const idx = job.pageNums.indexOf(pn);
+    if (idx === -1) continue;
 
-function updatePreview(batch, result) {
-  const box = document.getElementById('previewBox');
-  if (box.querySelector('em')) box.innerHTML = '';
-  const tgtCode = document.getElementById('targetLang').value;
-  const isRTL = RTL_LANGS.has(tgtCode);
+    try {
+      const single = { ...job, images: [job.images[idx]], pageNums: [pn] };
+      await new Promise(r => setTimeout(r, 5000));
+      const ocrRaw    = await callLlamaOCR(single);
+      const ocrParsed = extractPages(ocrRaw, [pn]);
+      const extracted = ocrParsed[pn];
+      if (!extracted || extracted.startsWith('[Could not extract') || extracted.length < 10) continue;
 
-  for (const pn of batch) {
-    const titleEl = document.createElement('div');
-    titleEl.className = 'preview-page-title';
-    titleEl.textContent = `Page ${pn}`;
-    box.appendChild(titleEl);
-
-    const d = document.createElement('div');
-    const txt = result[pn] || '[Empty]';
-    d.textContent = txt.length > 500 ? txt.substring(0, 500) + '…' : txt;
-    d.style.marginBottom = '14px';
-    if (isRTL) {
-      d.style.direction = 'rtl';
-      d.style.textAlign = 'right';
-      d.style.fontFamily = "'Noto Nastaliq Urdu','Jameel Noori Nastaleeq','Amiri',serif";
-      d.style.fontSize = '1.1em';
-      d.style.lineHeight = '2.6';
-    }
-    box.appendChild(d);
-  }
-  box.scrollTop = box.scrollHeight;
-}
-
-function log(msg, type = 'dim') {
-  const box = document.getElementById('logBox');
-  const el = document.createElement('div');
-  el.className = `log-line ${type}`;
-  el.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
-  box.appendChild(el);
-  box.scrollTop = box.scrollHeight;
-}
-
-// ── PDF Generation (theme-aware, RTL-aware) ────────────────────
-async function downloadPDF() {
-  const { jsPDF } = window.jspdf;
-  const doc = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-
-  // ── Active theme & typography ──────────────────────────────
-  const T    = PDF_THEMES[pdfTheme];
-  const mL   = pdfMargin, mR = pdfMargin, mB = 18, mT = pdfMargin + 6;
-  const W    = 210, H = 297;
-  const cW   = W - mL - mR;
-  const lH   = pdfFontSize * pdfSpacing * 0.352778; // pt → mm, then × spacing
-
-  const [bgR,  bgG,  bgB]  = hexToRgb(T.bg);
-  const [txR,  txG,  txB]  = hexToRgb(T.text);
-  const [hbR,  hbG,  hbB]  = hexToRgb(T.headerBg);
-  const [htR,  htG,  htB]  = hexToRgb(T.headerText);
-  const [acR,  acG,  acB]  = hexToRgb(T.accent);
-
-  const tgtLangCode = document.getElementById('targetLang').value;
-  const tgtName = document.getElementById('targetLang')
-    .options[document.getElementById('targetLang').selectedIndex].text;
-  const srcName = document.getElementById('sourceLang')
-    .options[document.getElementById('sourceLang').selectedIndex].text;
-  const isRTL = RTL_LANGS.has(tgtLangCode);
-
-  log(`Composing PDF — theme: ${T.name}, ${pdfFontSize}pt, ${pdfSpacing}× spacing…`, 'info');
-
-  function pdfSafe(str) { return str.replace(/[^\x20-\x7E]/g, '').trim(); }
-  const safeSrc = pdfSafe(srcName) || 'Auto-detect';
-  const safeTgt = pdfSafe(tgtName) || tgtName.split(' ').slice(1).join(' ') || tgtName;
-  const siteUrl = 'translatebooks.vercel.app';
-
-  // Watermark — auto-tints to be subtle against any background
-  function addWatermark() {
-    doc.setGState(new doc.GState({ opacity: 0.06 }));
-    doc.setFont('times', 'bolditalic');
-    doc.setFontSize(52);
-    doc.setTextColor(acR, acG, acB);
-    doc.text('DocuTranslate', W/2, H/2 + 14, { align: 'center', angle: 42 });
-    doc.setGState(new doc.GState({ opacity: 1.0 }));
-  }
-
-  // Footer
-  function addFooter() {
-    doc.setFontSize(6.5);
-    doc.setFont('times', 'italic');
-    doc.setTextColor(htR, htG, htB);
-    doc.text(siteUrl, W/2, H - 6, { align: 'center' });
-  }
-
-  // ── Title page ──────────────────────────────────────────────
-  doc.setFillColor(hbR, hbG, hbB);
-  doc.rect(0, 0, W, H, 'F');
-  doc.setDrawColor(acR, acG, acB);
-  doc.setLineWidth(0.5);
-  doc.rect(9, 9, W-18, H-18);
-  doc.setLineWidth(0.2);
-  doc.rect(12, 12, W-24, H-24);
-
-  doc.setTextColor(acR, acG, acB);
-  doc.setFont('times', 'bolditalic');
-  doc.setFontSize(30);
-  doc.text('DocuTranslate', W/2, 58, { align: 'center' });
-
-  doc.setFont('times', 'italic');
-  doc.setFontSize(11);
-  doc.setTextColor(htR, htG, htB);
-  doc.text('AI-Powered Literary Translation', W/2, 70, { align: 'center' });
-
-  doc.setDrawColor(acR, acG, acB);
-  doc.setLineWidth(0.25);
-  doc.line(36, 80, W-36, 80);
-  doc.setFontSize(13);
-  doc.text('- o -', W/2, 91, { align: 'center' });
-
-  doc.setFont('times', 'normal');
-  doc.setFontSize(10);
-  const meta = [
-    `Source Language: ${safeSrc}`,
-    `Translated into: ${safeTgt}`,
-    `Pages translated: ${Object.keys(translations).length}`,
-    `Theme: ${T.name}  *  Font: ${pdfFontSize}pt  *  Spacing: ${pdfSpacing}x`,
-  ];
-  meta.forEach((line, i) => doc.text(line, W/2, 105 + i * 11, { align: 'center' }));
-
-  doc.line(36, 152, W-36, 152);
-  doc.setFontSize(8);
-  doc.text(`Generated: ${new Date().toLocaleString()}`, W/2, 162, { align: 'center' });
-  doc.setFont('times', 'italic');
-  doc.setFontSize(7.5);
-  doc.text(`Powered by Google Gemini AI  *  ${siteUrl}`, W/2, H-17, { align: 'center' });
-
-  doc.addPage();
-
-  const sorted = Object.keys(translations).map(Number).sort((a, b) => a - b);
-
-  // Header bar for each page
-  function drawHeader(pageNum, cont = false) {
-    doc.setFillColor(hbR, hbG, hbB);
-    doc.rect(0, 0, W, 14, 'F');
-    doc.setDrawColor(acR, acG, acB);
-    doc.setLineWidth(0.15);
-    doc.line(0, 14, W, 14);
-    doc.setFontSize(7.5);
-    doc.setFont('times', 'italic');
-    doc.setTextColor(htR, htG, htB);
-    doc.text('DocuTranslate', mL, 9);
-    doc.text(`Page ${pageNum}${cont ? ' (cont.)' : ''}  *  ${safeTgt}`, W - mR, 9, { align: 'right' });
-  }
-
-  // ── RTL path: html2canvas ──────────────────────────────────
-  if (isRTL) {
-    await document.fonts.ready;
-
-    for (const pn of sorted) {
-      const text = translations[pn] || '';
-      const isBlank = !text || text.trim() === '[Blank page]' || text.trim() === '';
-
-      doc.setFillColor(bgR, bgG, bgB);
-      doc.rect(0, 0, W, H, 'F');
-      drawHeader(pn);
-
-      if (isBlank) {
-        doc.setFontSize(10);
-        doc.setTextColor(htR, htG, htB);
-        doc.setFont('times', 'italic');
-        doc.text(`— Page ${pn}: Blank —`, W/2, H/2, { align: 'center' });
-        addWatermark(); addFooter();
-        doc.addPage(); continue;
+      await new Promise(r => setTimeout(r, 3000));
+      const translated = await callQwen3Translate(job.sourceLang, job.targetLang, extracted);
+      if (translated && translated.trim().length > 10) {
+        rescued[pn] = deduplicateContent(translated.trim());
       }
+    } catch (_) { /* skip */ }
+  }
 
-      const SCALE = 2, PX_MM = 96/25.4;
-      const imgH = H - 16 - mB - 10;
-      const divW = Math.round(cW * PX_MM * SCALE);
-      const divH = Math.round(imgH * PX_MM * SCALE);
+  return rescued;
+}
 
-      // RTL font size scales with user selection (base 12pt @ normal)
-      const rtlPx = Math.round((pdfFontSize / 11) * 12 * SCALE);
+// ─── Main job dispatcher ──────────────────────────────────────────────────
+async function processJob(job) {
+  const lang        = (job.sourceLang || 'auto').toLowerCase();
+  const isHardKnown = KNOWN_HARD_SCRIPTS.has(lang);
+  const hasGemini   = !!GEMINI_API_KEY && geminiAvailable;
+  const hasGroq     = !!GROQ_API_KEY;
 
-      const div = document.createElement('div');
-      div.style.cssText = [
-        'position:fixed','top:0','left:-99999px',
-        `width:${divW}px`, `height:${divH}px`,
-        'overflow:hidden',
-        `background:${T.bg}`,
-        `color:${T.text}`,
-        "font-family:'Noto Nastaliq Urdu','Jameel Noori Nastaleeq','Amiri',serif",
-        `font-size:${rtlPx}px`,
-        `line-height:${T.rtlLineH}`,
-        'direction:rtl','text-align:justify',
-        `padding:${Math.round(10*SCALE)}px ${Math.round(14*SCALE)}px`,
-        'box-sizing:border-box','word-break:break-word','white-space:pre-wrap'
-      ].join(';');
-      div.textContent = text;
-      document.body.appendChild(div);
+  // ── Decide primary provider ─────────────────────────────────────────
+  // Priority order:
+  //   1. Session lock: hard source detected mid-session → force Gemini
+  //   2. Explicit hard script → Gemini
+  //   3. Anything else → Llama (saves Gemini quota for the cases that need it)
+  let primaryFn, primaryName;
 
-      try {
-        const canvas = await html2canvas(div, {
-          scale:1, useCORS:true, backgroundColor:T.bg, logging:false,
-          width:divW, height:divH
-        });
-        doc.addImage(canvas.toDataURL('image/jpeg', 0.93), 'JPEG', mL, 16, cW, imgH);
-        addWatermark(); addFooter();
-        log(`✓ RTL page ${pn} rendered`, 'ok');
-      } catch(e) {
-        doc.setFontSize(9);
-        doc.setTextColor(180, 60, 60);
-        doc.text(`[Rendering error on page ${pn}]`, mL, mT + 5);
-        addFooter();
-        log(`⚠ Canvas error page ${pn}: ${e.message}`, 'warn');
-      } finally {
-        document.body.removeChild(div);
-      }
-      doc.addPage();
-    }
-
-  // ── LTR path: native jsPDF text ───────────────────────────
+  if ((hardSourceDetected || isHardKnown) && hasGemini) {
+    primaryFn   = callGemini;
+    primaryName = 'gemini';
+  } else if (hasGroq) {
+    primaryFn   = callLlamaTranslate;
+    primaryName = 'llama';
+  } else if (hasGemini) {
+    primaryFn   = callGemini;
+    primaryName = 'gemini';
   } else {
-    for (const pn of sorted) {
-      const text = translations[pn] || '';
-      const isBlank = !text || text.trim() === '[Blank page]' || text.trim() === '';
+    throw new Error('NO_PROVIDERS: No API keys configured.');
+  }
 
-      doc.setFillColor(bgR, bgG, bgB);
-      doc.rect(0, 0, W, H, 'F');
-      drawHeader(pn);
+  let raw;
+  try {
+    console.log(`[translate] Primary: ${primaryName} for pages ${job.pageNums.join(',')}${hardSourceDetected ? ' [hard-source lock active]' : ''}`);
+    raw = await primaryFn(job);
+  } catch (err) {
+    const msg = err.message || '';
 
-      if (isBlank) {
-        doc.setFontSize(10);
-        doc.setTextColor(htR, htG, htB);
-        doc.setFont('times', 'italic');
-        doc.text(`— Page ${pn}: Blank —`, W/2, H/2, { align: 'center' });
-        addWatermark(); addFooter();
-        doc.addPage(); continue;
+    // Fallback to alternate provider for the entire batch
+    if (primaryName === 'gemini' && hasGroq) {
+      if (isGeminiDailyQuota(msg)) geminiAvailable = false;
+      console.log(`[translate] Gemini failed — falling back to Llama for whole job`);
+      try {
+        raw = await callLlamaTranslate(job);
+        primaryName = 'llama';
+      } catch (err2) {
+        return processFallbackOnly(job, err2);
       }
-
-      addWatermark();
-      doc.setTextColor(txR, txG, txB);
-      doc.setFontSize(pdfFontSize);
-      doc.setFont('times', 'normal');
-
-      const lines = doc.splitTextToSize(text, cW);
-      let y = mT;
-
-      for (const line of lines) {
-        if (y + lH > H - mB - 10) {
-          addFooter();
-          doc.addPage();
-          doc.setFillColor(bgR, bgG, bgB);
-          doc.rect(0, 0, W, H, 'F');
-          drawHeader(pn, true);
-          addWatermark();
-          doc.setTextColor(txR, txG, txB);
-          doc.setFontSize(pdfFontSize);
-          doc.setFont('times', 'normal');
-          y = mT;
-        }
-        doc.text(line, mL, y);
-        y += lH;
+    } else if (primaryName === 'llama' && hasGemini) {
+      console.log(`[translate] Llama failed — falling back to Gemini for whole job`);
+      try {
+        raw = await callGemini(job);
+        primaryName = 'gemini';
+      } catch (err2) {
+        return processFallbackOnly(job, err2);
       }
-      addFooter();
-      doc.addPage();
+    } else {
+      throw err;
     }
   }
 
-  if (doc.getNumberOfPages() > 1) doc.deletePage(doc.getNumberOfPages());
+  // ── Hallucination signature detection (only relevant when Llama is primary) ──
+  // If output contains classical/religious markers and source was auto-detected,
+  // the source is likely a hard script — escalate THIS batch to Gemini AND lock
+  // the session so all future batches go to Gemini directly.
+  if (primaryName === 'llama' && !isHardKnown && hasGemini) {
+    if (detectHallucinationProneSource(raw)) {
+      console.log(`[translate] Hallucination signature detected — escalating entire batch to Gemini and locking session`);
+      hardSourceDetected = true;
+      try {
+        const geminiRaw = await callGemini(job);
+        raw = geminiRaw;
+        primaryName = 'llama→gemini';  // notation: llama detected, escalated to gemini
+      } catch (err) {
+        // Gemini failed — we still have llama output, mark it as suspect
+        console.log(`[translate] Gemini escalation failed: ${err.message?.slice(0, 80)}`);
+        primaryName = 'llama_suspect';
+      }
+    }
+  }
 
-  const fname = `DocuTranslate_${safeTgt}_${T.name.replace(/\s+/g,'')}_${new Date().toISOString().slice(0,10)}.pdf`;
-  doc.save(fname);
-  log(`✅ Downloaded: ${fname}`, 'ok');
+  // ── Parse + dedup + flag bad pages ──────────────────────────────────
+  const parsed   = extractPages(raw, job.pageNums);
+  const deduped  = {};
+  const badPages = [];
+
+  for (const pn of job.pageNums) {
+    const original = parsed[pn];
+    const clean    = original.startsWith('[Could not extract') ? original : deduplicateContent(original);
+    deduped[pn]    = clean;
+    if (isPageGarbage(original, clean)) badPages.push(pn);
+  }
+
+  let usedProvider = primaryName;
+
+  // ── Per-page escalation for bad pages ──────────────────────────────
+  if (badPages.length > 0) {
+    console.log(`[translate] ${badPages.length} bad pages from ${primaryName} — escalating`);
+
+    if (primaryName.startsWith('llama') && hasGemini) {
+      const rescued = await rescueWithGemini(job, badPages);
+      for (const [pn, text] of Object.entries(rescued)) {
+        deduped[parseInt(pn)] = text;
+        const idx = badPages.indexOf(parseInt(pn));
+        if (idx !== -1) badPages.splice(idx, 1);
+      }
+      if (Object.keys(rescued).length > 0) {
+        usedProvider = primaryName.includes('gemini') ? primaryName : `${primaryName}+gemini`;
+      }
+    } else if (primaryName === 'gemini' && hasGroq) {
+      const rescued = await rescueWithLlama(job, badPages);
+      for (const [pn, text] of Object.entries(rescued)) {
+        deduped[parseInt(pn)] = text;
+        const idx = badPages.indexOf(parseInt(pn));
+        if (idx !== -1) badPages.splice(idx, 1);
+      }
+      if (Object.keys(rescued).length > 0) usedProvider = 'gemini+llama';
+    }
+
+    // Final pipeline rescue for stubborn pages
+    if (badPages.length > 0 && hasGroq) {
+      const rescued = await rescueWithPipeline(job, badPages);
+      for (const [pn, text] of Object.entries(rescued)) {
+        deduped[parseInt(pn)] = text;
+      }
+      if (Object.keys(rescued).length > 0) usedProvider = `${usedProvider}+pipeline`;
+    }
+  }
+
+  return { translations: deduped, provider: usedProvider, hardSourceDetected };
 }
-</script>
-</body>
-</html>
+
+function processFallbackOnly(job, err) {
+  const msg = err.message || 'All providers failed';
+  if (isGeminiDailyQuota(msg) && isGroqQuota(msg)) {
+    throw new Error('QUOTA_EXHAUSTED_ALL: Both quotas exhausted. Gemini resets at midnight PT, Groq at midnight UTC.');
+  }
+  throw err;
+}
+
+// ─── Error classifiers ────────────────────────────────────────────────────
+function isGeminiDailyQuota(msg) {
+  return msg.includes('GenerateRequestsPerDayPerProjectPerModel') ||
+         (msg.includes('429') && msg.includes('limit: 20'));
+}
+function isGroqQuota(msg) {
+  return msg.includes('rate_limit_exceeded') ||
+         msg.includes('tokens_per_day') ||
+         msg.includes('requests_per_day');
+}
+function isRecitation(msg) {
+  return msg.includes('RECITATION') || msg.includes('recitation') ||
+         msg.includes('SAFETY') || msg.includes('finish_reason: SAFETY');
+}
+
+// ─── Queue runner ─────────────────────────────────────────────────────────
+async function runQueue() {
+  if (isProcessing || queue.length === 0) return;
+  isProcessing = true;
+
+  while (queue.length > 0) {
+    const job = queue[0];
+
+    if (Date.now() - job.timestamp > 180000) {
+      jobResults[job.id] = { status: "error", error: "Job expired — session timed out" };
+      queue.shift();
+      continue;
+    }
+
+    jobResults[job.id] = { status: "processing", queuePos: 0 };
+
+    try {
+      const result = await processJob(job);
+      jobResults[job.id] = {
+        status: "done",
+        translations: result.translations,
+        provider:     result.provider,
+        hardSourceDetected: result.hardSourceDetected
+      };
+    } catch (err) {
+      const msg = err.message || '';
+      if (msg.includes('QUOTA_EXHAUSTED_ALL') || msg.includes('NO_PROVIDERS')) {
+        jobResults[job.id] = { status: "error", error: msg };
+        drainQueue(msg);
+        isProcessing = false;
+        return;
+      }
+      jobResults[job.id] = { status: "error", error: msg };
+    }
+
+    queue.shift();
+    queue.forEach((j, idx) => {
+      if (jobResults[j.id]) jobResults[j.id].queuePos = idx + 1;
+    });
+
+    const delay = 50000 + Math.floor(Math.random() * 10000);
+    await new Promise(r => setTimeout(r, delay));
+  }
+
+  isProcessing = false;
+}
+
+function drainQueue(reason) {
+  while (queue.length > 0) {
+    const j = queue.shift();
+    if (!jobResults[j.id] || jobResults[j.id].status === 'queued') {
+      jobResults[j.id] = { status: "error", error: reason };
+    }
+  }
+}
+
+function cleanupOldResults() {
+  const now = Date.now();
+  for (const id in jobResults) {
+    if (jobResults[id].timestamp && now - jobResults[id].timestamp > 3600000) {
+      delete jobResults[id];
+    }
+  }
+}
+
+// ─── HTTP handler ─────────────────────────────────────────────────────────
+module.exports = async (req, res) => {
+  res.setHeader("Access-Control-Allow-Origin", "*");
+  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  if (req.method === "OPTIONS") return res.status(200).end();
+
+  const { action } = req.query;
+
+  if (req.method === "GET" && action === "languages")
+    return res.json({ languages: LANGUAGES });
+
+  if (req.method === "GET" && action === "status") {
+    const { id } = req.query;
+    if (!id || !jobResults[id]) {
+      const queuePos = queue.findIndex(j => j.id === id);
+      if (queuePos >= 0)
+        return res.json({ status: "queued", queuePos: queuePos + 1, queueLength: queue.length });
+      return res.status(404).json({ error: "Job not found" });
+    }
+    return res.json(jobResults[id]);
+  }
+
+  if (req.method === "GET" && action === "queue")
+    return res.json({ queueLength: queue.length, isProcessing, hardSourceDetected });
+
+  if (req.method === "POST") {
+    cleanupOldResults();
+
+    if (!GEMINI_API_KEY && !GROQ_API_KEY)
+      return res.status(500).json({ error: "No API keys configured. Set GEMINI_API_KEY or GROQ_API_KEY in Vercel environment variables." });
+
+    // Reset session state when this is a fresh submission to a quiet queue
+    // (best-effort: if no jobs are processing, treat as new session)
+    if (!isProcessing && queue.length === 0) {
+      if (GEMINI_API_KEY) geminiAvailable = true;
+      hardSourceDetected = false;
+    }
+
+    const { images, pageNums, sourceLang, targetLang } = req.body;
+    if (!images || !pageNums || images.length !== pageNums.length)
+      return res.status(400).json({ error: "Invalid request: images and pageNums required." });
+    if (images.length > 5)
+      return res.status(400).json({ error: "Max 5 pages per request." });
+
+    const id  = `job_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+    const job = {
+      id, images, pageNums,
+      sourceLang: sourceLang || "auto",
+      targetLang: targetLang || "en",
+      timestamp:  Date.now()
+    };
+
+    queue.push(job);
+    jobResults[id] = {
+      status: "queued",
+      queuePos:    queue.length,
+      queueLength: queue.length,
+      timestamp:   Date.now()
+    };
+
+    runQueue().catch(console.error);
+    return res.json({ id, status: "queued", queuePos: queue.length, queueLength: queue.length });
+  }
+
+  return res.status(405).json({ error: "Method not allowed" });
+};
