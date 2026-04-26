@@ -62,10 +62,24 @@ const HALLUCINATION_SIGNATURES = [
   /peace be upon (him|her|them)/gi,
   /\b(may|the) (god|allah) (be pleased|forgive|bless|the almighty)/gi,
   /it (was|is) narrated (by|that|from)/gi,
-  /\bthe (prophet|messenger) (of god|of allah|peace)/gi,
+
+  // Prophet/Messenger mentions — broadened to catch fiqh fabrication.
+  // Old pattern required "of god/allah/peace" — missed "The Prophet said/performed/wiped".
+  // New pattern fires on any sentence where "The Prophet" or "The Messenger" appears,
+  // whether followed by said/performed/wiped/ordered/replied or anything else.
+  /\bthe (prophet|messenger)\b/gi,
+
   /\b(hadith|quran|qur'an|allah|sunnah|sahaba)\b/gi,
   /\b(sahih|tafsir|fiqh|sharia|ulema)\b/gi,
   /\bibn\s+[A-Z][a-z]+/g,  // "ibn Arabi", "ibn Sina" etc.
+
+  // Islamic jurisprudence / ritual terms — absent from the old list.
+  // Llama fabricates fiqh content that never mentions "Prophet of Allah" explicitly
+  // but is saturated with these ritual terms instead.
+  /\b(wudu|tayammum|ablution|ghusl|janabah|hadath|najasa)\b/gi,
+  /\b(salah|salat|namaaz|zakat|sawm|hajj|fatwa|ijtihad)\b/gi,
+  /\b(companions of the prophet|the (companions|sahaba) (said|performed|did))\b/gi,
+  /the scholars (have )?(differed|agreed|said|mentioned) regarding/gi,
 
   // Sufi / Ibn Arabi specific patterns (the chapter naming style)
   /chapter on .{1,40}translation/gi,
@@ -311,8 +325,6 @@ function detectAndRemoveCycles(lines) {
   return output.join('\n');
 }
 
-// Returns true when a non-RTL output page is still mostly in Arabic/Farsi/Urdu script —
-// meaning Gemini ran out of tokens mid-batch and returned source text untranslated.
 function containsUntranslatedScript(text, targetLang) {
   if (['ar','fa','ur','he','am'].includes(targetLang)) return false;
   const arabicChars = (text.match(/[\u0600-\u06FF]/g) || []).length;
@@ -441,8 +453,7 @@ async function callGroqAPI(modelId, content, maxTokens, systemPrompt = null) {
   const data = await response.json();
   const raw  = data.choices?.[0]?.message?.content || "";
 
-  // Strip think blocks at the source — closed, unclosed, and empty shells.
-  // Handles the pipeline rescue path which doesn't go through extractPages().
+  // Strip think blocks at source — covers pipeline rescue path which bypasses extractPages()
   return raw
     .replace(/<think>[\s\S]*?<\/think>/gi, '')
     .replace(/<think>[\s\S]*/gi, '')
