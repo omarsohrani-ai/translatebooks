@@ -1,20 +1,23 @@
 // api/translate.js — Vercel Serverless Function
-// PDF Translation — Quality-driven routing with per-page escalation
+// PDF Translation — Quality-driven multi-agent routing with hallucination detection
 //
-// Architecture (Groq-first with Gemini as quality rescue):
+// Key features:
+//   1. Routing based on declared source language (saves Gemini for hard scripts)
+//   2. Per-page quality detection (cycle/repetition/length anomalies)
+//   3. Per-page Gemini rescue when Llama produces garbage
+//   4. Hallucination signature detector — catches Llama fabricating on classical
+//      texts (Islamic, Buddhist, Hindu, etc.) even when output isn't repetitive
+//   5. Session-level lock: once a hard-source signature is detected, all
+//      subsequent batches in this session route to Gemini regardless of routing
+//   6. OCR→Qwen3 pipeline as last resort when Gemini quota exhausts
 //
-//   For explicit complex scripts (ar/fa/ur/he):
-//     Tier 1: Gemini (vision)        — best OCR, no wasted calls
-//     Tier 2: Llama Scout (vision)   — fallback when Gemini quota exhausts
-//     Tier 3: Llama OCR + Qwen3      — last resort pipeline
-//
-//   For everything else (auto-detect, English, French, etc.):
-//     Tier 1: Llama Scout (vision)   — saves Gemini quota for the 95% of jobs
-//     Tier 2: Gemini (vision)        — PER-PAGE escalation when Llama produces garbage
-//     Tier 3: Llama OCR + Qwen3      — last resort pipeline
-//
-//   Quality detection happens AFTER each page. Garbage = cycles, frequency
-//   spam, or extraction failure. Only those specific pages get escalated.
+// Provider field returned to client:
+//   'gemini'              — Gemini handled cleanly
+//   'llama'               — Llama handled cleanly
+//   'llama+gemini'        — Llama tried, some pages escalated to Gemini
+//   'gemini+llama'        — Gemini tried, some pages fell back to Llama
+//   'llama+gemini+pipeline' — Both vision providers tried, final pipeline rescue
+//   'pipeline'            — Pipeline-only (Gemini exhausted, Llama looping)
 //
 // Setup:
 //   Required: GEMINI_API_KEY  — aistudio.google.com (20 RPD free)
@@ -26,8 +29,9 @@ const queue       = [];
 const jobResults  = {};
 let isProcessing  = false;
 
-// Session state — flips to false when Gemini quota is exhausted
-let geminiAvailable = true;
+// Session state
+let geminiAvailable    = true;   // flips false when Gemini quota exhausts
+let hardSourceDetected = false;  // flips true when classical/religious text detected
 
 const GEMINI_API_KEY = process.env.GEMINI_API_KEY;
 const GROQ_API_KEY   = process.env.GROQ_API_KEY;
@@ -46,9 +50,55 @@ const LANGUAGES = {
   sw:"Swahili", am:"Amharic",   so:"Somali",   ha:"Hausa"
 };
 
-// EXPLICITLY chosen scripts where Gemini's OCR justifies spending its quota upfront.
-// 'auto' is intentionally NOT in this set — most auto users translate normal content.
+// Languages explicitly requiring Gemini for OCR quality
 const KNOWN_HARD_SCRIPTS = new Set(['ar', 'fa', 'ur', 'he', 'am', 'th']);
+
+// ─── Hallucination signature patterns ─────────────────────────────────────
+// These appear in Llama's output when it's fabricating content from training
+// data instead of reading the actual page. Detection across multiple religious
+// and classical traditions, not Arabic-specific.
+const HALLUCINATION_SIGNATURES = [
+  // Islamic / classical Arabic markers
+  /peace be upon (him|her|them)/gi,
+  /\b(may|the) (god|allah) (be pleased|forgive|bless|the almighty)/gi,
+  /it (was|is) narrated (by|that|from)/gi,
+  /\bthe (prophet|messenger) (of god|of allah|peace)/gi,
+  /\b(hadith|quran|qur'an|allah|sunnah|sahaba)\b/gi,
+  /\b(sahih|tafsir|fiqh|sharia|ulema)\b/gi,
+  /\bibn\s+[A-Z][a-z]+/g,  // "ibn Arabi", "ibn Sina" etc.
+
+  // Sufi / Ibn Arabi specific patterns (the chapter naming style)
+  /chapter on .{1,40}translation/gi,
+  /book of (translations|biographies|exhortations|indications|sayings)/gi,
+  /\b(a hint|an indication|a fine point|a subtlety|a nice saying)\s*[-:—]/gi,
+
+  // Buddhist markers
+  /\b(buddha said|the dharma|sutra|bodhisattva|sangha|nirvana)\b/gi,
+  /\b(zen master|mahayana|theravada)\b/gi,
+
+  // Hindu / Sanskrit markers
+  /\b(bhagavan|krishna said|veda|upanishad|purana|shloka|verse said)\b/gi,
+  /\b(arjuna|guru|swami|brahman|atman)\b/gi,
+
+  // Jewish / Hebrew markers
+  /\b(torah|talmud|midrash|rabbi|halakha|kabbalah)\b/gi,
+  /\bblessed be he\b/gi,
+
+  // Christian medieval / patristic markers
+  /\b(saint augustine|aquinas|patristic|epistle of)\b/gi,
+];
+
+function detectHallucinationProneSource(text) {
+  if (!text || text.length < 50) return false;
+
+  let signalCount = 0;
+  for (const pattern of HALLUCINATION_SIGNATURES) {
+    const matches = text.match(pattern);
+    if (matches) signalCount += matches.length;
+    if (signalCount >= 3) return true; // early exit
+  }
+  return signalCount >= 3;
+}
 
 // ─── Prompt builders ──────────────────────────────────────────────────────
 function buildTranslatePrompt(targetLang, sourceLang, pageNums, isGroqModel = false) {
@@ -57,10 +107,13 @@ ANTI-HALLUCINATION RULES — CRITICAL for this model:
 - Output ONLY text you can physically READ in the image. Nothing else.
 - If you cannot read a word clearly, write [unclear] — do NOT guess.
 - If a page has only a few lines, your output must be only a few lines.
-- NEVER generate filler text, religious commentary, or scholarly prose.
+- NEVER generate filler text, religious commentary, or scholarly prose from memory.
+- NEVER write phrases like "It was narrated", "Peace be upon him", "The Prophet said"
+  unless those exact words are clearly visible in the image.
 - NEVER repeat any sentence more than once. If you catch yourself repeating, STOP.
-- If you have written more than 30 sentences for one page, STOP — something is wrong.
-- The source may contain deliberate parallelism. Translate it accurately but do NOT amplify it.
+- If you have written more than 30 sentences for one page, STOP.
+- Do NOT translate Arabic words by their phonetic similarity to other names —
+  read each word carefully and translate its actual meaning.
 ` : '';
 
   return `You are a professional literary translator. Translate all text from these scanned document pages from ${sourceLang} into ${targetLang}.
@@ -96,7 +149,7 @@ function buildOCRPrompt(sourceLang, pageNums) {
 
 RULES:
 - Extract the EXACT text visible — every word, every line
-- Preserve the ORIGINAL script (Arabic, Persian, etc.) — do NOT translate
+- Preserve the ORIGINAL script — do NOT translate
 - Preserve paragraph structure and line breaks
 - If you cannot read a word, write [unclear]
 - If a page is blank, write exactly: [Blank page]
@@ -147,7 +200,6 @@ function extractPages(raw, pageNums) {
     if (content) blocks[pn] = content;
   }
 
-  // Fallback: no PAGE markers but real content → assign to first page
   if (Object.keys(blocks).length === 0 && text.trim().length > 20 && pageNums.length === 1) {
     blocks[pageNums[0]] = text.trim();
   }
@@ -159,39 +211,56 @@ function extractPages(raw, pageNums) {
   return parsed;
 }
 
-// ─── Quality detection: cycles + frequency + length sanity ────────────────
-//
-// Catches three failure modes:
-//   1. Cyclical loops (A→B→C→A→B→C) — most common Llama failure
-//   2. Frequency spam (same sentence appearing 5+ times scattered) — softer loops
-//   3. Length explosion (output >600 words from one page image) — hallucination
-//
+// ─── Quality detection: cycles + frequency + length ──────────────────────
 function deduplicateContent(text) {
+  // Pass 0: within-line repetition (semicolon/comma separated fragments)
+  // Catches: "do not be against him; do not be against him; do not be against him"
+  // Strategy: split each line by [;.] and apply the same frequency cap within the line.
+  text = text.split('\n').map(line => {
+    const trimmed = line.trim();
+    if (trimmed.length < 40) return line; // short lines — skip
+
+    // Split on '; ' or '. ' but preserve the separator for reconstruction
+    const parts = trimmed.split(/(?<=\w)(?:; |(?<!\w\.\w)\. )/);
+    if (parts.length < 3) return line;
+
+    const seen   = new Map();
+    const kept   = [];
+    let removed  = 0;
+    for (const part of parts) {
+      const key = part.toLowerCase().replace(/\s+/g, ' ').trim();
+      if (key.length < 12) { kept.push(part); continue; }
+      const cnt = (seen.get(key) || 0) + 1;
+      seen.set(key, cnt);
+      if (cnt <= 2) kept.push(part);
+      else removed++;
+    }
+    if (removed === 0) return line;
+    return kept.join('; ') + (removed > 0 ? ' [⚠ within-line repetition removed]' : '');
+  }).join('\n');
+
   const lines = text.split('\n').map(l => l.trim()).filter(l => l.length > 0);
   if (lines.length < 4) return text;
 
-  // Pass 1: frequency cap — max 2 occurrences of any substantial sentence
+  // Pass 1: frequency cap (max 2 occurrences of any sentence)
   const freq  = new Map();
   const pass1 = [];
 
   for (const line of lines) {
     const key = line.toLowerCase().replace(/\s+/g, ' ').replace(/[.,:;!?]+$/, '').trim();
-
     if (key.length < 25) { pass1.push(line); continue; }
-
     const count = (freq.get(key) || 0) + 1;
     freq.set(key, count);
     if (count <= 2) pass1.push(line);
   }
 
-  // Pass 2: cycle detection (A→B→C→A→B→C pattern)
+  // Pass 2: cycle detection
   const result = detectAndRemoveCycles(pass1);
 
-  // Pass 3: hard cap — single page rarely exceeds 500 words
+  // Pass 3: hard word cap
   const words = result.split(/\s+/).length;
   if (words > 600) {
-    const truncated = result.split(/\s+/).slice(0, 500).join(' ');
-    return truncated + '\n[⚠ Output truncated — possible hallucination]';
+    return result.split(/\s+/).slice(0, 500).join(' ') + '\n[⚠ Output truncated — possible hallucination]';
   }
 
   return result;
@@ -205,7 +274,7 @@ function detectAndRemoveCycles(lines) {
     let cycleFound = false;
 
     for (let cycleLen = 2; cycleLen <= 6 && !cycleFound; cycleLen++) {
-      if (i + cycleLen * 3 > lines.length) continue; // need 3+ reps
+      if (i + cycleLen * 3 > lines.length) continue;
 
       const cycle = lines.slice(i, i + cycleLen);
       let reps = 1;
@@ -240,19 +309,15 @@ function detectAndRemoveCycles(lines) {
   return output.join('\n');
 }
 
-// Did dedup remove >60% of content? Strong signal that the page is garbage.
 function isPageGarbage(originalText, dedupedText) {
   if (!originalText || originalText.startsWith('[Could not extract')) return true;
-  if (dedupedText.includes('[⚠')) return true; // explicit warnings already attached
-
+  if (dedupedText.includes('[⚠')) return true;
   const origWords  = originalText.split(/\s+/).length;
   const dedupWords = dedupedText.split(/\s+/).length;
-
-  // Removed >60% AND original was substantial (not just a header)
   return origWords > 50 && dedupWords < origWords * 0.4;
 }
 
-// ─── Provider: Gemini (vision — OCR + translate in one call) ──────────────
+// ─── Provider: Gemini ─────────────────────────────────────────────────────
 async function callGemini(job) {
   const genAI = new GoogleGenerativeAI(GEMINI_API_KEY);
   const model = genAI.getGenerativeModel({
@@ -284,7 +349,7 @@ async function callGemini(job) {
   return text;
 }
 
-// ─── Provider: Llama Scout (vision — OCR + translate) ─────────────────────
+// ─── Provider: Llama Scout (vision OCR + translate) ───────────────────────
 async function callLlamaTranslate(job) {
   const targetLang = LANGUAGES[job.targetLang] || "English";
   const sourceLang = job.sourceLang === "auto"
@@ -304,7 +369,7 @@ async function callLlamaTranslate(job) {
   return callGroqAPI("meta-llama/llama-4-scout-17b-16e-instruct", content, job.pageNums.length * 800);
 }
 
-// ─── Provider: Llama Scout OCR-only (vision — extract text, no translate) ─
+// ─── Provider: Llama Scout OCR-only ───────────────────────────────────────
 async function callLlamaOCR(job) {
   const sourceLang = job.sourceLang === "auto"
     ? "the source language"
@@ -323,7 +388,7 @@ async function callLlamaOCR(job) {
   return callGroqAPI("meta-llama/llama-4-scout-17b-16e-instruct", content, job.pageNums.length * 600);
 }
 
-// ─── Provider: Qwen3-32B (TEXT-ONLY translator, used in rescue pipeline) ──
+// ─── Provider: Qwen3-32B text-only ───────────────────────────────────────
 async function callQwen3Translate(sourceLang, targetLang, extractedText) {
   const tgt = LANGUAGES[targetLang] || "English";
   const src = sourceLang === "auto"
@@ -360,8 +425,7 @@ async function callGroqAPI(modelId, content, maxTokens) {
   return data.choices?.[0]?.message?.content || "";
 }
 
-// ─── Per-page Gemini rescue (escalation) ──────────────────────────────────
-// Re-translates SPECIFIC pages flagged as garbage, using Gemini.
+// ─── Per-page Gemini rescue ───────────────────────────────────────────────
 async function rescueWithGemini(job, badPages) {
   console.log(`[translate] Gemini rescue for pages: ${badPages.join(',')}`);
   const rescued = {};
@@ -377,10 +441,8 @@ async function rescueWithGemini(job, badPages) {
       const raw    = await callGemini(single);
       const parsed = extractPages(raw, [pn]);
       const clean  = deduplicateContent(parsed[pn]);
-
       if (!parsed[pn].startsWith('[Could not extract') && !isPageGarbage(parsed[pn], clean)) {
         rescued[pn] = clean;
-        console.log(`[translate] Gemini rescued page ${pn}`);
       }
     } catch (err) {
       const msg = err.message || '';
@@ -389,159 +451,13 @@ async function rescueWithGemini(job, badPages) {
         console.log(`[translate] Gemini quota exhausted during rescue`);
         break;
       }
-      console.log(`[translate] Gemini rescue failed for page ${pn}: ${msg.slice(0, 80)}`);
     }
   }
 
   return rescued;
 }
 
-// ─── OCR→Qwen3 pipeline rescue (last resort) ──────────────────────────────
-// Used when Gemini is unavailable AND Llama produced garbage.
-async function rescueWithPipeline(job, badPages) {
-  console.log(`[translate] OCR→Qwen3 pipeline rescue for pages: ${badPages.join(',')}`);
-  const rescued = {};
-
-  for (const pn of badPages) {
-    const idx = job.pageNums.indexOf(pn);
-    if (idx === -1) continue;
-
-    try {
-      const single = { ...job, images: [job.images[idx]], pageNums: [pn] };
-      await new Promise(r => setTimeout(r, 5000));
-      const ocrRaw    = await callLlamaOCR(single);
-      const ocrParsed = extractPages(ocrRaw, [pn]);
-      const extracted = ocrParsed[pn];
-
-      if (!extracted || extracted.startsWith('[Could not extract') || extracted.length < 10) {
-        continue;
-      }
-
-      await new Promise(r => setTimeout(r, 3000));
-      const translated = await callQwen3Translate(job.sourceLang, job.targetLang, extracted);
-
-      if (translated && translated.trim().length > 10) {
-        rescued[pn] = deduplicateContent(translated.trim());
-        console.log(`[translate] Pipeline rescued page ${pn}`);
-      }
-    } catch (err) {
-      console.log(`[translate] Pipeline rescue failed page ${pn}: ${err.message?.slice(0, 80)}`);
-    }
-  }
-
-  return rescued;
-}
-
-// ─── Main job dispatcher ──────────────────────────────────────────────────
-async function processJob(job) {
-  const lang        = (job.sourceLang || 'auto').toLowerCase();
-  const isHardKnown = KNOWN_HARD_SCRIPTS.has(lang);
-  const hasGemini   = !!GEMINI_API_KEY && geminiAvailable;
-  const hasGroq     = !!GROQ_API_KEY;
-
-  // ── Decide primary provider ─────────────────────────────────────────
-  // Explicit hard script → Gemini (no wasted Groq call)
-  // Auto-detect or other languages → Llama Scout (saves Gemini quota)
-  let primaryFn, primaryName;
-  if (isHardKnown && hasGemini) {
-    primaryFn   = callGemini;
-    primaryName = 'gemini';
-  } else if (hasGroq) {
-    primaryFn   = callLlamaTranslate;
-    primaryName = 'llama';
-  } else if (hasGemini) {
-    primaryFn   = callGemini;
-    primaryName = 'gemini';
-  } else {
-    throw new Error('NO_PROVIDERS: No API keys configured.');
-  }
-
-  let raw;
-  try {
-    console.log(`[translate] Primary: ${primaryName} for pages ${job.pageNums.join(',')}`);
-    raw = await primaryFn(job);
-  } catch (err) {
-    const msg = err.message || '';
-
-    // Primary failed entirely — try the OTHER vision provider for the whole job
-    if (primaryName === 'gemini' && hasGroq) {
-      if (isGeminiDailyQuota(msg)) geminiAvailable = false;
-      console.log(`[translate] Gemini failed (${msg.slice(0, 60)}) — falling back to Llama for whole job`);
-      try {
-        raw = await callLlamaTranslate(job);
-        primaryName = 'llama';
-      } catch (err2) {
-        return processFallbackOnly(job, err2);
-      }
-    } else if (primaryName === 'llama' && hasGemini) {
-      if (isGroqQuota(msg)) {
-        console.log(`[translate] Groq quota exhausted — falling back to Gemini for whole job`);
-      } else {
-        console.log(`[translate] Llama failed (${msg.slice(0, 60)}) — falling back to Gemini`);
-      }
-      try {
-        raw = await callGemini(job);
-        primaryName = 'gemini';
-      } catch (err2) {
-        return processFallbackOnly(job, err2);
-      }
-    } else {
-      throw err;
-    }
-  }
-
-  // ── Parse + dedup + flag bad pages ──────────────────────────────────
-  const parsed  = extractPages(raw, job.pageNums);
-  const deduped = {};
-  const badPages = [];
-
-  for (const pn of job.pageNums) {
-    const original = parsed[pn];
-    const clean    = original.startsWith('[Could not extract') ? original : deduplicateContent(original);
-    deduped[pn]    = clean;
-    if (isPageGarbage(original, clean)) badPages.push(pn);
-  }
-
-  let usedProvider = primaryName;
-
-  // ── ESCALATION: bad pages get retried by the alternate vision provider ──
-  if (badPages.length > 0) {
-    console.log(`[translate] ${badPages.length} bad pages from ${primaryName} — escalating`);
-
-    if (primaryName === 'llama' && hasGemini) {
-      // Llama loops → Gemini rescue (quality escalation)
-      const rescued = await rescueWithGemini(job, badPages);
-      for (const [pn, text] of Object.entries(rescued)) {
-        deduped[parseInt(pn)] = text;
-        const idx = badPages.indexOf(parseInt(pn));
-        if (idx !== -1) badPages.splice(idx, 1);
-      }
-      if (Object.keys(rescued).length > 0) usedProvider = 'llama+gemini';
-    } else if (primaryName === 'gemini' && hasGroq) {
-      // Gemini failed on these pages → try Llama
-      const rescued = await rescueWithLlama(job, badPages);
-      for (const [pn, text] of Object.entries(rescued)) {
-        deduped[parseInt(pn)] = text;
-        const idx = badPages.indexOf(parseInt(pn));
-        if (idx !== -1) badPages.splice(idx, 1);
-      }
-      if (Object.keys(rescued).length > 0) usedProvider = 'gemini+llama';
-    }
-
-    // Still bad? Try the OCR→Qwen3 pipeline as last resort
-    if (badPages.length > 0 && hasGroq) {
-      const rescued = await rescueWithPipeline(job, badPages);
-      for (const [pn, text] of Object.entries(rescued)) {
-        deduped[parseInt(pn)] = text;
-      }
-      if (Object.keys(rescued).length > 0) usedProvider = `${usedProvider}+pipeline`;
-    }
-  }
-
-  return { translations: deduped, provider: usedProvider };
-}
-
-// Per-page Llama rescue (used when Gemini was primary and failed on some pages)
+// ─── Per-page Llama rescue ────────────────────────────────────────────────
 async function rescueWithLlama(job, badPages) {
   const rescued = {};
   for (const pn of badPages) {
@@ -557,6 +473,197 @@ async function rescueWithLlama(job, badPages) {
     } catch (_) { /* skip */ }
   }
   return rescued;
+}
+
+// ─── OCR→Qwen3 pipeline rescue (last resort) ──────────────────────────────
+async function rescueWithPipeline(job, badPages) {
+  console.log(`[translate] OCR→Qwen3 pipeline rescue for pages: ${badPages.join(',')}`);
+  const rescued = {};
+
+  for (const pn of badPages) {
+    const idx = job.pageNums.indexOf(pn);
+    if (idx === -1) continue;
+
+    try {
+      const single = { ...job, images: [job.images[idx]], pageNums: [pn] };
+      await new Promise(r => setTimeout(r, 5000));
+      const ocrRaw    = await callLlamaOCR(single);
+      const ocrParsed = extractPages(ocrRaw, [pn]);
+      const extracted = ocrParsed[pn];
+      if (!extracted || extracted.startsWith('[Could not extract') || extracted.length < 10) continue;
+
+      await new Promise(r => setTimeout(r, 3000));
+      const translated = await callQwen3Translate(job.sourceLang, job.targetLang, extracted);
+      if (translated && translated.trim().length > 10) {
+        rescued[pn] = deduplicateContent(translated.trim());
+      }
+    } catch (_) { /* skip */ }
+  }
+
+  return rescued;
+}
+
+// ─── Main job dispatcher ──────────────────────────────────────────────────
+async function processJob(job) {
+  const lang        = (job.sourceLang || 'auto').toLowerCase();
+  const isHardKnown = KNOWN_HARD_SCRIPTS.has(lang);
+  const hasGemini   = !!GEMINI_API_KEY && geminiAvailable;
+  const hasGroq     = !!GROQ_API_KEY;
+
+  // ── Decide primary provider ─────────────────────────────────────────
+  // Priority order:
+  //   1. Session lock: hard source detected mid-session → force Gemini
+  //   2. Explicit hard script → Gemini
+  //   3. Anything else → Llama (saves Gemini quota for the cases that need it)
+  let primaryFn, primaryName;
+
+  if ((hardSourceDetected || isHardKnown) && hasGemini) {
+    primaryFn   = callGemini;
+    primaryName = 'gemini';
+  } else if (hasGroq) {
+    primaryFn   = callLlamaTranslate;
+    primaryName = 'llama';
+  } else if (hasGemini) {
+    primaryFn   = callGemini;
+    primaryName = 'gemini';
+  } else {
+    throw new Error('NO_PROVIDERS: No API keys configured.');
+  }
+
+  let raw;
+  try {
+    console.log(`[translate] Primary: ${primaryName} for pages ${job.pageNums.join(',')}${hardSourceDetected ? ' [hard-source lock active]' : ''}`);
+    raw = await primaryFn(job);
+  } catch (err) {
+    const msg = err.message || '';
+
+    // Fallback to alternate provider for the entire batch
+    if (primaryName === 'gemini' && hasGroq) {
+      if (isGeminiDailyQuota(msg)) geminiAvailable = false;
+      console.log(`[translate] Gemini failed — falling back to Llama for whole job`);
+      try {
+        raw = await callLlamaTranslate(job);
+        primaryName = 'llama';
+      } catch (err2) {
+        return processFallbackOnly(job, err2);
+      }
+    } else if (primaryName === 'llama' && hasGemini) {
+      console.log(`[translate] Llama failed — falling back to Gemini for whole job`);
+      try {
+        raw = await callGemini(job);
+        primaryName = 'gemini';
+      } catch (err2) {
+        return processFallbackOnly(job, err2);
+      }
+    } else {
+      throw err;
+    }
+  }
+
+  // ── Hallucination signature detection (only when Llama is primary) ────────
+  // Fires when Llama's output contains classical/religious source markers.
+  // These markers mean Llama is drawing on training data rather than reading
+  // the page — output is fabricated even if it isn't repetitive.
+  let hallucinationRisk = false;
+
+  if (primaryName === 'llama' && !isHardKnown) {
+    if (detectHallucinationProneSource(raw)) {
+      hardSourceDetected = true;
+      hallucinationRisk  = true;
+
+      if (hasGemini) {
+        // Best path: escalate entire batch to Gemini and lock session
+        console.log(`[translate] Hallucination signature detected — escalating to Gemini, locking session`);
+        try {
+          raw = await callGemini(job);
+          primaryName = 'llama→gemini';
+          hallucinationRisk = false; // Gemini output is trustworthy
+        } catch (err) {
+          const msg = err.message || '';
+          if (isGeminiDailyQuota(msg)) geminiAvailable = false;
+          console.log(`[translate] Gemini escalation failed: ${msg.slice(0, 80)}`);
+          primaryName = 'llama_unverified';
+        }
+      } else {
+        // Gemini unavailable — cannot rescue. Mark output as unverified.
+        // The pipeline rescue (Llama OCR → Qwen3) will run below for bad pages,
+        // but even clean-looking Llama pages may be fabricated — user must be warned.
+        console.log(`[translate] WARN: hallucination signature detected but Gemini unavailable — output unverified`);
+        primaryName = 'llama_unverified';
+      }
+    }
+  }
+
+  // ── Parse + dedup + flag bad pages ──────────────────────────────────
+  const parsed   = extractPages(raw, job.pageNums);
+  const deduped  = {};
+  const badPages = [];
+
+  for (const pn of job.pageNums) {
+    const original = parsed[pn];
+    const clean    = original.startsWith('[Could not extract') ? original : deduplicateContent(original);
+    deduped[pn]    = clean;
+    if (isPageGarbage(original, clean)) badPages.push(pn);
+  }
+
+  let usedProvider = primaryName;
+
+  // ── Per-page escalation for bad pages ──────────────────────────────
+  // "bad pages" = dedup detected garbage (cycles/truncation)
+  // "unverified pages" = hallucination risk flagged but Gemini unavailable —
+  //   even pages that look clean structurally may be fabricated content,
+  //   so we attempt pipeline rescue on ALL pages in that case.
+  const pagesNeedingRescue = (primaryName === 'llama_unverified')
+    ? [...job.pageNums]   // all pages unverified → attempt pipeline on everything
+    : [...badPages];      // only structurally garbage pages
+
+  if (badPages.length > 0 || primaryName === 'llama_unverified') {
+    if (badPages.length > 0)
+      console.log(`[translate] ${badPages.length} bad pages from ${primaryName} — escalating`);
+    if (primaryName === 'llama_unverified')
+      console.log(`[translate] All pages unverified (Gemini unavailable) — attempting pipeline rescue`);
+
+    if (primaryName.startsWith('llama') && primaryName !== 'llama_unverified' && hasGemini) {
+      // Normal bad-page rescue via Gemini
+      const rescued = await rescueWithGemini(job, badPages);
+      for (const [pn, text] of Object.entries(rescued)) {
+        deduped[parseInt(pn)] = text;
+        const idx = badPages.indexOf(parseInt(pn));
+        if (idx !== -1) badPages.splice(idx, 1);
+      }
+      if (Object.keys(rescued).length > 0) {
+        usedProvider = primaryName.includes('gemini') ? primaryName : `${primaryName}+gemini`;
+      }
+    } else if (primaryName === 'gemini' && hasGroq) {
+      const rescued = await rescueWithLlama(job, badPages);
+      for (const [pn, text] of Object.entries(rescued)) {
+        deduped[parseInt(pn)] = text;
+        const idx = badPages.indexOf(parseInt(pn));
+        if (idx !== -1) badPages.splice(idx, 1);
+      }
+      if (Object.keys(rescued).length > 0) usedProvider = 'gemini+llama';
+    }
+
+    // Pipeline rescue: runs for (a) pages still bad after Gemini rescue,
+    // OR (b) ALL pages when output is unverified due to hallucination risk
+    const pipelineTargets = primaryName === 'llama_unverified'
+      ? pagesNeedingRescue   // attempt all
+      : badPages;            // only remaining bad pages
+
+    if (pipelineTargets.length > 0 && hasGroq) {
+      const rescued = await rescueWithPipeline(job, pipelineTargets);
+      for (const [pn, text] of Object.entries(rescued)) {
+        deduped[parseInt(pn)] = text;
+      }
+      if (Object.keys(rescued).length > 0) {
+        usedProvider = primaryName === 'llama_unverified'
+          ? 'pipeline'
+          : `${usedProvider}+pipeline`;
+      }
+    }
+  }
+
+  return { translations: deduped, provider: usedProvider, hardSourceDetected, hallucinationRisk };
 }
 
 function processFallbackOnly(job, err) {
@@ -599,8 +706,14 @@ async function runQueue() {
     jobResults[job.id] = { status: "processing", queuePos: 0 };
 
     try {
-      const { translations, provider } = await processJob(job);
-      jobResults[job.id] = { status: "done", translations, provider };
+      const result = await processJob(job);
+      jobResults[job.id] = {
+        status: "done",
+        translations: result.translations,
+        provider:          result.provider,
+        hardSourceDetected: result.hardSourceDetected,
+        hallucinationRisk:  result.hallucinationRisk
+      };
     } catch (err) {
       const msg = err.message || '';
       if (msg.includes('QUOTA_EXHAUSTED_ALL') || msg.includes('NO_PROVIDERS')) {
@@ -666,7 +779,7 @@ module.exports = async (req, res) => {
   }
 
   if (req.method === "GET" && action === "queue")
-    return res.json({ queueLength: queue.length, isProcessing });
+    return res.json({ queueLength: queue.length, isProcessing, hardSourceDetected });
 
   if (req.method === "POST") {
     cleanupOldResults();
@@ -674,7 +787,12 @@ module.exports = async (req, res) => {
     if (!GEMINI_API_KEY && !GROQ_API_KEY)
       return res.status(500).json({ error: "No API keys configured. Set GEMINI_API_KEY or GROQ_API_KEY in Vercel environment variables." });
 
-    if (GEMINI_API_KEY) geminiAvailable = true;
+    // Reset session state when this is a fresh submission to a quiet queue
+    // (best-effort: if no jobs are processing, treat as new session)
+    if (!isProcessing && queue.length === 0) {
+      if (GEMINI_API_KEY) geminiAvailable = true;
+      hardSourceDetected = false;
+    }
 
     const { images, pageNums, sourceLang, targetLang } = req.body;
     if (!images || !pageNums || images.length !== pageNums.length)
