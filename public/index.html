@@ -1349,10 +1349,11 @@ async function pollJob(id) {
     }
     qBanner.classList.add('hidden');
     if (d.status === 'done') {
-      // Attach provider + hardSource flag to translations object for caller
+      // Attach provider + flags to translations object for caller
       const translations = d.translations;
-      Object.defineProperty(translations, '_provider', { value: d.provider || '', enumerable: false });
-      Object.defineProperty(translations, '_hardSourceDetected', { value: !!d.hardSourceDetected, enumerable: false });
+      Object.defineProperty(translations, '_provider',          { value: d.provider || '',        enumerable: false });
+      Object.defineProperty(translations, '_hardSourceDetected',{ value: !!d.hardSourceDetected,  enumerable: false });
+      Object.defineProperty(translations, '_hallucinationRisk', { value: !!d.hallucinationRisk,   enumerable: false });
       return translations;
     }
     if (d.status === 'error') {
@@ -1379,7 +1380,8 @@ async function startTranslation() {
   paused = false;
   stopped = false;
   startTime = Date.now();
-  window._hardSourceWarned = false;  // reset session-level warning flag
+  window._hardSourceWarned      = false;  // reset per-session warning flags
+  window._hallucinationRiskWarned = false;
 
   document.getElementById('startBtn').disabled = true;
   document.getElementById('pauseBtn').classList.remove('hidden');
@@ -1414,24 +1416,36 @@ async function startTranslation() {
       pagesDone += batch.length;
       updateProgress(pagesDone, endPage - startPage + 1);
       updatePreview(batch, result);
-      // Show which provider handled this batch — covers the new multi-provider tags
+
+      // ── Provider tag in log ──────────────────────────────────────────
       const provider = result._provider || '';
       let providerTag = '';
-      if (provider === 'gemini')                  providerTag = ' [Gemini ✦]';
+      if      (provider === 'gemini')             providerTag = ' [Gemini ✦]';
       else if (provider === 'llama')              providerTag = ' [Llama 🦙]';
-      else if (provider === 'llama+gemini' ||
-               provider === 'llama→gemini')       providerTag = ' [Llama→Gemini ✦ rescue]';
+      else if (provider === 'llama→gemini')       providerTag = ' [Llama→Gemini ✦ rescued]';
       else if (provider === 'gemini+llama')       providerTag = ' [Gemini+Llama hybrid]';
-      else if (provider.includes('pipeline'))     providerTag = ' [OCR→Qwen3 pipeline rescue]';
-      else if (provider === 'llama_suspect')      providerTag = ' [Llama ⚠ unverified]';
+      else if (provider === 'pipeline')           providerTag = ' [OCR→Qwen3 pipeline]';
+      else if (provider.includes('pipeline'))     providerTag = ` [${provider.replace('+pipeline','')} + OCR→Qwen3 rescue]`;
+      else if (provider === 'llama_unverified')   providerTag = ' [Llama ⚠ UNVERIFIED]';
       else if (provider)                          providerTag = ` [${provider}]`;
-      log(`✓ Pages ${batch.join(', ')} done${providerTag}`, 'ok');
 
-      // First-time hard-source detection notice
+      const logClass = provider === 'llama_unverified' ? 'warn' : 'ok';
+      log(`✓ Pages ${batch.join(', ')} done${providerTag}`, logClass);
+
+      // ── Hard-source session lock notice (fires once per session) ────
       if (result._hardSourceDetected && !window._hardSourceWarned) {
         window._hardSourceWarned = true;
         log('⚠ Classical/religious source text detected — locking session to Gemini for accuracy.', 'warn');
-        log('   (Llama tends to fabricate plausible-sounding content on these texts. Gemini is more faithful.)', 'dim');
+        log('   Llama tends to fabricate plausible content on these texts. Gemini is more faithful.', 'dim');
+      }
+
+      // ── Hallucination risk warning (Gemini unavailable) ─────────────
+      if (result._hallucinationRisk && !window._hallucinationRiskWarned) {
+        window._hallucinationRiskWarned = true;
+        log('⛔ WARNING: Classical/religious source detected but Gemini quota is exhausted.', 'err');
+        log('   These pages were processed by Llama which may have fabricated content.', 'err');
+        log('   Pipeline rescue (OCR→Qwen3) was attempted where possible — but accuracy is NOT guaranteed.', 'warn');
+        log('   For reliable results: wait for Gemini quota reset (midnight PT) and re-translate with source language set explicitly to Arabic/Persian/Urdu.', 'warn');
       }
     } catch(err) {
       const msg = err.message || '';
